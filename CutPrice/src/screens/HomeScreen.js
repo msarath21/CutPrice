@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -36,21 +36,30 @@ export default function HomeScreen({ navigation }) {
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleSearch = async (text) => {
+  // Memoize categories to prevent unnecessary re-renders
+  const memoizedCategories = useMemo(() => categories, []);
+
+  // Debounce search to prevent too many API calls
+  const handleSearch = useCallback(async (text) => {
     setSearchQuery(text);
     if (text.length >= 2) {
       setLoading(true);
       setShowResults(true);
-      const results = await searchItems(text);
-      setSearchResults(results);
-      setLoading(false);
+      // Add delay to prevent too frequent API calls
+      const timeoutId = setTimeout(async () => {
+        const results = await searchItems(text);
+        setSearchResults(results);
+        setLoading(false);
+      }, 300);
+      return () => clearTimeout(timeoutId);
     } else {
       setShowResults(false);
       setSearchResults([]);
     }
-  };
+  }, []);
 
-  const renderSearchResult = ({ item }) => (
+  // Memoize render functions to prevent recreating on every render
+  const renderSearchResult = useCallback(({ item }) => (
     <View style={styles.searchResultItem}>
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.Item}</Text>
@@ -73,7 +82,10 @@ export default function HomeScreen({ navigation }) {
         )}
       </View>
     </View>
-  );
+  ), []);
+
+  const keyExtractor = useCallback((item, index) => 
+    `${item.Item}-${item.store}-${index}`, []);
 
   return (
     <View style={styles.container}>
@@ -108,6 +120,8 @@ export default function HomeScreen({ navigation }) {
               placeholderTextColor={COLORS.gray}
               value={searchQuery}
               onChangeText={handleSearch}
+              returnKeyType="search"
+              autoCorrect={false}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity 
@@ -133,8 +147,12 @@ export default function HomeScreen({ navigation }) {
                 <FlatList
                   data={searchResults}
                   renderItem={renderSearchResult}
-                  keyExtractor={(item, index) => `${item.Item}-${item.store}-${index}`}
+                  keyExtractor={keyExtractor}
                   contentContainerStyle={styles.searchResultsList}
+                  removeClippedSubviews={true}
+                  maxToRenderPerBatch={10}
+                  windowSize={5}
+                  initialNumToRender={10}
                 />
               ) : (
                 <View style={styles.noResultsContainer}>
@@ -144,7 +162,7 @@ export default function HomeScreen({ navigation }) {
             </View>
           ) : (
             <View style={styles.categoriesContainer}>
-              {categories.map((category, index) => (
+              {memoizedCategories.map((category, index) => (
                 <TouchableOpacity
                   key={category.id}
                   style={[

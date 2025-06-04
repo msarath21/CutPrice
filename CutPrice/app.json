@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CutPrice",
-    "slug": "CutPrice",
+    "slug": "cutprice",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#462009"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -27,15 +27,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.MEDIA_LIBRARY",
-        "android.permission.RECORD_AUDIO"
-      ],
-      "package": "com.msarath.CutPrice"
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -47,7 +43,8 @@
           "photosPermission": "The app needs access to your photos to upload bills.",
           "cameraPermission": "The app needs access to your camera to take photos of bills."
         }
-      ]
+      ],
+      "expo-file-system"
     ],
     "extra": {
       "eas": {

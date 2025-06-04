@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES, FONTS } from '../constants/theme';
 import StatusBar from '../components/StatusBar';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 2;
@@ -26,9 +27,152 @@ const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
 // Import the header image
 const headerLogo = require('../../assets/header.png');
 
+// Create a directory for storing receipts
+const RECEIPTS_DIRECTORY = `${FileSystem.documentDirectory}receipts`;
+const SERVER_URL = 'http://10.0.0.169:3000';
+
 export default function BillsScreen({ navigation }) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [receipts, setReceipts] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setupStorage();
+  }, []);
+
+  const setupStorage = async () => {
+    try {
+      const dirInfo = await FileSystem.getInfoAsync(RECEIPTS_DIRECTORY);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(RECEIPTS_DIRECTORY, { intermediates: true });
+      }
+      loadExistingReceipts();
+    } catch (error) {
+      console.error('Error setting up storage:', error);
+    }
+  };
+
+  const loadExistingReceipts = async () => {
+    try {
+      // Load local files
+      const files = await FileSystem.readDirectoryAsync(RECEIPTS_DIRECTORY);
+      const localReceipts = await Promise.all(files
+        .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
+        .map(async (file) => {
+          const fileInfo = await FileSystem.getInfoAsync(`${RECEIPTS_DIRECTORY}/${file}`);
+          return {
+            id: file.split('.')[0],
+            uri: fileInfo.uri,
+            timestamp: new Date(fileInfo.modificationTime * 1000).toLocaleString(),
+            type: 'gallery'
+          };
+        }));
+
+      // Load server files
+      try {
+        const serverResponse = await fetch(`${SERVER_URL}/images`);
+        if (serverResponse.ok) {
+          const serverImages = await serverResponse.json();
+          const serverReceipts = serverImages.map(img => ({
+            id: img.filename.split('.')[0],
+            uri: img.url,
+            timestamp: new Date(img.timestamp).toLocaleString(),
+            type: 'server'
+          }));
+          
+          // Combine local and server receipts, removing duplicates by id
+          const allReceipts = [...localReceipts, ...serverReceipts];
+          const uniqueReceipts = Array.from(new Map(allReceipts.map(item => [item.id, item])).values());
+          setReceipts(uniqueReceipts);
+        } else {
+          setReceipts(localReceipts);
+        }
+      } catch (serverError) {
+        console.error('Error loading server receipts:', serverError);
+        setReceipts(localReceipts);
+      }
+    } catch (error) {
+      console.error('Error loading existing receipts:', error);
+    }
+  };
+
+  const saveToStorage = async (uri, filename) => {
+    try {
+      // First save locally
+      const destPath = `${RECEIPTS_DIRECTORY}/${filename}`;
+      await FileSystem.copyAsync({
+        from: uri,
+        to: destPath
+      });
+
+      // Then upload to server with retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
+      let lastError = null;
+
+      while (retryCount < maxRetries) {
+        try {
+          // Convert image to base64 for reliable upload
+          const base64 = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          const formData = new FormData();
+          formData.append('image', {
+            uri: `data:image/jpeg;base64,${base64}`,
+            type: 'image/jpeg',
+            name: filename
+          });
+
+          const response = await fetch(`${SERVER_URL}/upload`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+          }
+
+          const serverResponse = await response.json();
+          if (retryCount > 0) {
+            console.log(`Upload succeeded on attempt ${retryCount + 1}`);
+          } else {
+            console.log('Upload succeeded on first attempt');
+          }
+          console.log('Server response:', serverResponse);
+          break; // Success, exit retry loop
+        } catch (uploadError) {
+          lastError = uploadError;
+          if (retryCount < maxRetries - 1) {
+            console.log(`Upload attempt ${retryCount + 1} failed, retrying...`);
+          } else {
+            console.log(`Upload attempt ${retryCount + 1} failed (final attempt)`);
+          }
+          retryCount++;
+          
+          if (retryCount < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            const delay = 1000 * Math.pow(2, retryCount);
+            console.log(`Waiting ${delay/1000} seconds before next attempt...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+        }
+      }
+
+      if (retryCount === maxRetries && lastError) {
+        console.error('All upload attempts failed:', lastError);
+        // Continue with local save even if server upload fails
+      }
+
+      return destPath;
+    } catch (error) {
+      console.error('Error saving file:', error);
+      throw error;
+    }
+  };
 
   const requestPermissions = async () => {
     if (Platform.OS !== 'web') {
@@ -64,13 +208,21 @@ export default function BillsScreen({ navigation }) {
     });
 
     if (!result.canceled) {
-      const newReceipt = {
-        id: Date.now().toString(),
-        uri: result.assets[0].uri,
-        timestamp: new Date().toLocaleString(),
-        type: 'gallery'
-      };
-      setReceipts(prevReceipts => [newReceipt, ...prevReceipts]);
+      try {
+        const timestamp = Date.now();
+        const filename = `receipt_${timestamp}.jpg`;
+        const savedUri = await saveToStorage(result.assets[0].uri, filename);
+        
+        const newReceipt = {
+          id: timestamp.toString(),
+          uri: savedUri,
+          timestamp: new Date().toLocaleString(),
+          type: 'gallery'
+        };
+        setReceipts(prevReceipts => [newReceipt, ...prevReceipts]);
+      } catch (error) {
+        Alert.alert('Error', 'Failed to save receipt');
+      }
     }
   };
 
@@ -79,19 +231,94 @@ export default function BillsScreen({ navigation }) {
     const hasPermission = await requestPermissions();
     if (!hasPermission) return;
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: false,
-      quality: 1,
-    });
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        quality: 0.7,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      });
 
-    if (!result.canceled) {
-      const newReceipt = {
-        id: Date.now().toString(),
-        uri: result.assets[0].uri,
-        timestamp: new Date().toLocaleString(),
-        type: 'camera'
-      };
-      setReceipts(prevReceipts => [newReceipt, ...prevReceipts]);
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const timestamp = Date.now();
+        const filename = `receipt_${timestamp}.jpg`;
+        
+        try {
+          // Show loading indicator
+          setLoading(true);
+          
+          const savedUri = await saveToStorage(result.assets[0].uri, filename);
+          
+          const newReceipt = {
+            id: timestamp.toString(),
+            uri: savedUri,
+            timestamp: new Date().toLocaleString(),
+            type: 'camera'
+          };
+          setReceipts(prevReceipts => [newReceipt, ...prevReceipts]);
+          
+          // Refresh the receipts list
+          await loadExistingReceipts();
+
+          // Show success message
+          Alert.alert(
+            'Success',
+            'Receipt saved successfully!',
+            [{ text: 'OK' }]
+          );
+        } catch (saveError) {
+          console.error('Save error:', saveError);
+          Alert.alert(
+            'Upload Warning',
+            'Image saved locally but might have issues with server upload.',
+            [{ text: 'OK' }]
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+    } catch (cameraError) {
+      console.error('Camera error:', cameraError);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const deleteReceipt = async (item) => {
+    try {
+      // Show confirmation dialog
+      Alert.alert(
+        'Delete Receipt',
+        'Are you sure you want to delete this receipt?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Delete from local storage
+                if (item.uri.startsWith(FileSystem.documentDirectory)) {
+                  await FileSystem.deleteAsync(item.uri);
+                }
+
+                // Remove from state
+                setReceipts(prevReceipts => 
+                  prevReceipts.filter(receipt => receipt.id !== item.id)
+                );
+
+              } catch (error) {
+                console.error('Delete error:', error);
+                Alert.alert('Error', 'Failed to delete receipt');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Delete error:', error);
+      Alert.alert('Error', 'Failed to delete receipt');
     }
   };
 
@@ -109,12 +336,20 @@ export default function BillsScreen({ navigation }) {
         resizeMode="cover"
       />
       <View style={styles.receiptInfo}>
-        <MaterialIcons 
-          name={item.type === 'camera' ? 'camera-alt' : 'photo-library'} 
-          size={16} 
-          color={COLORS.gray}
-        />
-        <Text style={styles.receiptTimestamp}>{item.timestamp}</Text>
+        <View style={styles.receiptDetails}>
+          <MaterialIcons 
+            name={item.type === 'camera' ? 'camera-alt' : 'photo-library'} 
+            size={16} 
+            color={COLORS.gray}
+          />
+          <Text style={styles.receiptTimestamp}>{item.timestamp}</Text>
+        </View>
+        <TouchableOpacity 
+          style={styles.deleteButton}
+          onPress={() => deleteReceipt(item)}
+        >
+          <MaterialIcons name="delete" size={20} color={COLORS.error} />
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -271,7 +506,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: SIZES.base,
+    justifyContent: 'space-between',
+  },
+  receiptDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: SIZES.base,
+    flex: 1,
   },
   receiptTimestamp: {
     fontSize: SIZES.fontSize.small,
@@ -345,5 +586,8 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: COLORS.primary,
+  },
+  deleteButton: {
+    padding: 4,
   },
 }); 

@@ -1,16 +1,25 @@
-const { getDefaultConfig } = require('@expo/metro-config');
+const { getDefaultConfig } = require('expo/metro-config');
 
-const defaultConfig = getDefaultConfig(__dirname);
-const { assetExts, sourceExts } = defaultConfig.resolver;
+module.exports = (() => {
+  const config = getDefaultConfig(__dirname);
 
-const config = {
-  ...defaultConfig,
-  resolver: {
-    ...defaultConfig.resolver,
-    assetExts: [...assetExts, 'db', 'sqlite', 'csv'],
-    sourceExts: [...sourceExts, 'jsx', 'js', 'ts', 'tsx', 'json'],
-    requireCycleIgnorePatterns: [/(java|com|org)\..*/, /.*\.gradle.*/],
-  },
-};
+  const { transformer, resolver } = config;
 
-module.exports = config; 
+  config.transformer = {
+    ...transformer,
+    getTransformOptions: async () => ({
+      transform: {
+        experimentalImportSupport: false,
+        inlineRequires: true,
+      },
+    }),
+  };
+
+  config.resolver = {
+    ...resolver,
+    sourceExts: [...resolver.sourceExts, 'cjs'],
+    assetExts: [...resolver.assetExts, 'db', 'sqlite'],
+  };
+
+  return config;
+})(); 

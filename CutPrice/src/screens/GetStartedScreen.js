@@ -27,7 +27,7 @@ export default function GetStartedScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
@@ -40,26 +40,27 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#DC2626',
+    color: '#462009',
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#462009',
     marginBottom: 40,
     textAlign: 'center',
+    opacity: 0.8,
   },
   buttonContainer: {
     width: '100%',
   },
   button: {
-    backgroundColor: '#DC2626',
+    backgroundColor: '#462009',
     padding: 15,
     borderRadius: 10,
     alignItems: 'center',
   },
   buttonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 18,
     fontWeight: 'bold',
   },
