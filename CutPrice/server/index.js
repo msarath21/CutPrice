@@ -15,31 +15,85 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Create storage directory if it doesn't exist
-const storageDir = 'E:\\LocalStorage';
-if (!fs.existsSync(storageDir)) {
-    fs.mkdirSync(storageDir, { recursive: true });
+// Create storage directories if they don't exist
+const storageDir = path.join('E:', 'LocalStorage');
+const excelDir = path.join(storageDir, 'excel_exports');
+
+try {
+    // Test write permissions by creating directories
+    if (!fs.existsSync(storageDir)) {
+        fs.mkdirSync(storageDir, { recursive: true });
+        console.log('Main storage directory created at:', storageDir);
+    }
+    
+    if (!fs.existsSync(excelDir)) {
+        fs.mkdirSync(excelDir, { recursive: true });
+        console.log('Excel directory created at:', excelDir);
+    }
+    
+    // Test write permissions by creating and removing a test file
+    const testFile = path.join(storageDir, 'test.txt');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    
+    console.log('Storage directories verified with write permissions:');
+    console.log('Storage directory:', storageDir);
+    console.log('Excel directory:', excelDir);
+} catch (error) {
+    console.error('Error with storage directories:', error);
+    console.error('Please ensure the application has write permissions to:', storageDir);
+    process.exit(1); // Exit if we can't create/write to essential directories
 }
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
+        // Double-check directory exists before saving
+        if (!fs.existsSync(storageDir)) {
+            fs.mkdirSync(storageDir, { recursive: true });
+        }
         cb(null, storageDir);
     },
     filename: function (req, file, cb) {
         const timestamp = Date.now();
-        cb(null, `receipt_${timestamp}${path.extname(file.originalname)}`);
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `receipt_${timestamp}${ext}`);
     }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ 
+    storage: storage,
+    fileFilter: (req, file, cb) => {
+        // Accept only image files
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'));
+        }
+    },
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    }
+});
 
 // Helper function to save base64 image
 const saveBase64Image = (base64Data, filename) => {
-    const base64Image = base64Data.split(';base64,').pop();
-    const filePath = path.join(storageDir, filename);
-    fs.writeFileSync(filePath, base64Image, { encoding: 'base64' });
-    return filePath;
+    try {
+        const base64Image = base64Data.split(';base64,').pop();
+        const filePath = path.join(storageDir, filename);
+        
+        // Ensure directory exists before writing
+        if (!fs.existsSync(storageDir)) {
+            fs.mkdirSync(storageDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(filePath, base64Image, { encoding: 'base64' });
+        console.log('Base64 image saved successfully:', filePath);
+        return filePath;
+    } catch (error) {
+        console.error('Error saving base64 image:', error);
+        throw error;
+    }
 };
 
 // Serve static files from the storage directory
@@ -53,6 +107,8 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         let filePath;
 
         console.log('Starting upload processing...');
+        console.log('Request body:', req.body);
+        console.log('Request file:', req.file);
 
         if (req.file) {
             // Regular file upload
@@ -62,13 +118,19 @@ app.post('/upload', upload.single('image'), async (req, res) => {
             console.log('Received file upload:', filename);
         } else if (req.body.image && req.body.image.uri && req.body.image.uri.startsWith('data:image')) {
             // Base64 image upload
-            filename = req.body.image.name;
+            const timestamp = Date.now();
+            const ext = req.body.image.name ? path.extname(req.body.image.name) : '.jpg';
+            filename = `receipt_${timestamp}${ext}`;
             filePath = saveBase64Image(req.body.image.uri, filename);
             imageUrl = `http://localhost:${port}/images/${filename}`;
             console.log('Received base64 image:', filename);
         } else {
             console.log('Invalid upload request');
-            return res.status(400).json({ error: 'No valid image data provided' });
+            return res.status(400).json({ 
+                error: 'No valid image data provided',
+                body: req.body,
+                file: req.file 
+            });
         }
 
         // Process the new receipt image immediately
@@ -99,7 +161,10 @@ app.post('/upload', upload.single('image'), async (req, res) => {
         });
     } catch (error) {
         console.error('Upload error:', error);
-        res.status(500).json({ error: 'Failed to upload file' });
+        res.status(500).json({ 
+            error: 'Failed to upload file',
+            message: error.message
+        });
     }
 });
 
@@ -166,7 +231,7 @@ app.post('/process-receipts', async (req, res) => {
 app.get('/download-excel/:filename', (req, res) => {
     try {
         const filename = req.params.filename;
-        const filePath = path.join('E:', 'LocalStorage', 'excel_exports', filename);
+        const filePath = path.join(excelDir, filename);
         
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ error: 'Excel file not found' });

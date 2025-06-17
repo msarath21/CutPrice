@@ -7,76 +7,160 @@ import {
   TextInput,
   Image,
   SafeAreaView,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { COLORS, SIZES } from '../constants/theme';
-import StatusBar from '../components/StatusBar';
-
-// Import the header image
-const headerLogo = require('../../assets/header.png');
+import { COLORS, SIZES, SHADOWS } from '../constants/theme';
 
 export default function SignUpScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   const handleSignUp = () => {
-    // TODO: Add actual registration
+    // TODO: Implement sign up
+    navigation.replace('Home');
+  };
+
+  const handleGuestLogin = () => {
+    // Skip authentication and go directly to Home
     navigation.replace('Home');
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.content}>
-          <Image 
-            source={headerLogo}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          
-          <View style={styles.form}>
-            <TextInput
-              style={styles.input}
-              placeholder="Full Name"
-              value={name}
-              onChangeText={setName}
-            />
+    <SafeAreaView style={styles.container}>
+      <TouchableOpacity 
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
+      >
+        <Text>←</Text>
+      </TouchableOpacity>
 
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        <ScrollView 
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Sign Up</Text>
+              <Text style={styles.greeting}>Hello!</Text>
+            </View>
             
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={styles.form}>
+              <TextInput
+                style={styles.input}
+                placeholder="Name Or Email"
+                value={name}
+                onChangeText={setName}
+              />
 
-            <TouchableOpacity 
-              style={styles.signUpButton}
-              onPress={handleSignUp}
-            >
-              <Text style={styles.signUpButtonText}>Sign Up</Text>
-            </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
 
-            <TouchableOpacity 
-              style={styles.signInButton}
-              onPress={() => navigation.navigate('SignIn')}
-            >
-              <Text style={styles.signInButtonText}>Already have an account? Sign In</Text>
-            </TouchableOpacity>
+              <TextInput
+                style={styles.input}
+                placeholder="Number"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+              />
+
+              <View style={styles.termsContainer}>
+                <TouchableOpacity
+                  style={styles.checkbox}
+                  onPress={() => setAcceptTerms(!acceptTerms)}
+                >
+                  {acceptTerms && <View style={styles.checkboxInner} />}
+                </TouchableOpacity>
+                <Text style={styles.termsText}>
+                  I agree to all the <Text style={styles.termsLink}>Terms & Conditions</Text>
+                </Text>
+              </View>
+
+              <TouchableOpacity 
+                style={[styles.signUpButton, !acceptTerms && styles.signUpButtonDisabled]}
+                onPress={handleSignUp}
+                disabled={!acceptTerms}
+              >
+                <Text style={styles.signUpButtonText}>Sign Up</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.guestButton}
+                onPress={handleGuestLogin}
+              >
+                <Text style={styles.guestButtonText}>Continue as Guest</Text>
+              </TouchableOpacity>
+
+              <View style={styles.dividerContainer}>
+                <View style={styles.divider} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.divider} />
+              </View>
+
+              <View style={styles.socialButtons}>
+                <TouchableOpacity style={styles.socialButton}>
+                  <Image
+                    source={require('../../assets/icons/google.png')}
+                    style={styles.socialIcon}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.socialButton}>
+                  <Image
+                    source={require('../../assets/icons/apple.png')}
+                    style={styles.socialIcon}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.socialButton}>
+                  <Image
+                    source={require('../../assets/icons/facebook.png')}
+                    style={styles.socialIcon}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Already have an account? </Text>
+                <TouchableOpacity onPress={() => navigation.navigate('SignIn')}>
+                  <Text style={styles.signInText}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
-      </SafeAreaView>
-    </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -85,48 +169,152 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  safeArea: {
+  backButton: {
+    padding: SIZES.padding,
+  },
+  keyboardView: {
     flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
-    flex: 1,
-    padding: SIZES.padding * 2,
-    justifyContent: 'center',
+    paddingHorizontal: SIZES.padding * 2,
+    paddingBottom: SIZES.padding * 2,
   },
-  logo: {
-    height: 60,
-    width: 180,
-    alignSelf: 'center',
-    marginBottom: SIZES.padding * 3,
+  header: {
+    marginVertical: SIZES.padding * 0.7,
+  },
+  title: {
+    fontSize: SIZES.fontSize.title,
+    fontWeight: 'bold',
+    color: COLORS.black,
+  },
+  greeting: {
+    fontSize: SIZES.fontSize.title,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    marginTop: SIZES.base,
   },
   form: {
-    gap: SIZES.padding,
+    gap: SIZES.padding * 0.6,
+    marginTop: SIZES.padding * 0.7,
   },
   input: {
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
+    backgroundColor: COLORS.inputBackground,
     borderRadius: SIZES.radius,
-    padding: SIZES.padding,
+    borderWidth: 1,
+    borderColor: COLORS.inputBorder,
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: SIZES.padding * 0.7,
     fontSize: SIZES.fontSize.body,
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SIZES.base,
+    marginTop: SIZES.base * 0.5,
+  },
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxInner: {
+    width: 10,
+    height: 10,
+    backgroundColor: COLORS.primary,
+    borderRadius: 2,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: SIZES.fontSize.small,
+    color: COLORS.gray,
+  },
+  termsLink: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
   },
   signUpButton: {
     backgroundColor: COLORS.primary,
-    padding: SIZES.padding,
+    padding: SIZES.padding * 0.7,
     borderRadius: SIZES.radius,
     alignItems: 'center',
-    marginTop: SIZES.padding,
+    marginTop: SIZES.padding * 0.5,
+  },
+  signUpButtonDisabled: {
+    opacity: 0.6,
   },
   signUpButtonText: {
     color: COLORS.white,
     fontSize: SIZES.fontSize.subtitle,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  signInButton: {
-    padding: SIZES.padding,
+  guestButton: {
+    backgroundColor: COLORS.white,
+    padding: SIZES.padding * 0.7,
+    borderRadius: SIZES.radius,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  guestButtonText: {
+    color: COLORS.primary,
+    fontSize: SIZES.fontSize.subtitle,
+    fontWeight: 'bold',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SIZES.padding * 0.7,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.lightGray,
+  },
+  dividerText: {
+    color: COLORS.gray,
+    paddingHorizontal: SIZES.padding,
+    fontSize: SIZES.fontSize.small,
+  },
+  socialButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SIZES.padding,
+  },
+  socialButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  signInButtonText: {
+  socialIcon: {
+    width: 20,
+    height: 20,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: SIZES.padding * 0.7,
+  },
+  footerText: {
+    color: COLORS.gray,
+    fontSize: SIZES.fontSize.small,
+  },
+  signInText: {
     color: COLORS.primary,
-    fontSize: SIZES.fontSize.body,
+    fontSize: SIZES.fontSize.small,
+    fontWeight: 'bold',
   },
 }); 

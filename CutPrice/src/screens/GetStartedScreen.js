@@ -1,67 +1,54 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image, SafeAreaView } from 'react-native';
+import { COLORS, SIZES } from '../constants/theme';
 
 export default function GetStartedScreen({ navigation }) {
   return (
-    <View style={styles.container}>
-      <Image
-        source={require('../../assets/header.png')}
-        style={styles.logo}
-        resizeMode="contain"
-      />
-      <Text style={styles.title}>Welcome to CutPrice</Text>
-      <Text style={styles.subtitle}>Find the best deals on groceries</Text>
-      
-      <View style={styles.buttonContainer}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <Image
+          source={require('../../assets/header.png')}  // Using the existing header image
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        
         <TouchableOpacity
           style={styles.button}
           onPress={() => navigation.navigate('SignIn')}
         >
-          <Text style={styles.buttonText}>Get Started</Text>
+          <Text style={styles.buttonText}>GET STARTED</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: COLORS.white,
+  },
+  content: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: SIZES.padding * 2,
   },
   logo: {
-    width: 200,
-    height: 100,
-    marginBottom: 40,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#462009',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#462009',
-    marginBottom: 40,
-    textAlign: 'center',
-    opacity: 0.8,
-  },
-  buttonContainer: {
-    width: '100%',
+    width: '80%',
+    height: 200,
+    marginBottom: SIZES.padding * 4,
   },
   button: {
-    backgroundColor: '#462009',
-    padding: 15,
-    borderRadius: 10,
+    width: '100%',
+    backgroundColor: COLORS.primary,
+    padding: SIZES.padding,
+    borderRadius: SIZES.radius,
     alignItems: 'center',
   },
   buttonText: {
-    color: '#ffffff',
-    fontSize: 18,
+    color: COLORS.white,
+    fontSize: SIZES.fontSize.subtitle,
     fontWeight: 'bold',
   },
 }); 
