@@ -12,14 +12,7 @@ export default function SplashScreen({ navigation }) {
           await FileSystem.makeDirectoryAsync(`${FileSystem.documentDirectory}receipts`, { intermediates: true });
         }
 
-        // TODO: Add authentication check here if needed
-        // const isAuthenticated = await checkAuthStatus();
-        // if (isAuthenticated) {
-        //   navigation.replace('Home');
-        //   return;
-        // }
-
-        // Reduced timeout for better UX
+        // Navigate to GetStarted screen after initialization
         setTimeout(() => {
           navigation.replace('GetStarted');
         }, 1000);
@@ -46,12 +39,12 @@ export default function SplashScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
   },
   logo: {
-    width: 200,
+    width: '80%',
     height: 100,
   },
 }); 

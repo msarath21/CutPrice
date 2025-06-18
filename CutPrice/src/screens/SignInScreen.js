@@ -19,12 +19,11 @@ function SignInScreen({ navigation }) {
   const [password, setPassword] = useState('');
 
   const handleSignIn = () => {
-    // TODO: Implement authentication
+    // TODO: Implement your own authentication logic here
     navigation.replace('Home');
   };
 
   const handleGuestLogin = () => {
-    // Skip authentication and go directly to Home
     navigation.replace('Home');
   };
 
@@ -37,7 +36,7 @@ function SignInScreen({ navigation }) {
         <Text>←</Text>
       </TouchableOpacity>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
@@ -71,7 +70,7 @@ function SignInScreen({ navigation }) {
                 secureTextEntry
               />
 
-              <TouchableOpacity onPress={() => {/* Handle forgot password */}}>
+              <TouchableOpacity onPress={() => {/* TODO: Implement forgot password */}}>
                 <Text style={styles.forgotPassword}>Forgot Password?</Text>
               </TouchableOpacity>
 

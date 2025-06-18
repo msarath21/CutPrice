@@ -23,12 +23,11 @@ function SignUpScreen({ navigation }) {
   const [acceptTerms, setAcceptTerms] = useState(false);
 
   const handleSignUp = () => {
-    // TODO: Implement sign up
+    // TODO: Implement your own sign up logic here
     navigation.replace('Home');
   };
 
   const handleGuestLogin = () => {
-    // Skip authentication and go directly to Home
     navigation.replace('Home');
   };
 
@@ -41,25 +40,27 @@ function SignUpScreen({ navigation }) {
         <Text>←</Text>
       </TouchableOpacity>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.keyboardView}
       >
-        <ScrollView 
-          style={styles.scrollView}
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           <View style={styles.content}>
-            <View style={styles.header}>
-              <Text style={styles.title}>Sign Up</Text>
-              <Text style={styles.greeting}>Hello!</Text>
-            </View>
+            <Image
+              source={require('../../assets/header.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+
+            <Text style={styles.welcomeText}>Create Account</Text>
             
             <View style={styles.form}>
               <TextInput
                 style={styles.input}
-                placeholder="Name Or Email"
+                placeholder="Full Name"
                 value={name}
                 onChangeText={setName}
               />
@@ -69,13 +70,13 @@ function SignUpScreen({ navigation }) {
                 placeholder="Email"
                 value={email}
                 onChangeText={setEmail}
-                keyboardType="email-address"
                 autoCapitalize="none"
+                keyboardType="email-address"
               />
 
               <TextInput
                 style={styles.input}
-                placeholder="Number"
+                placeholder="Phone Number"
                 value={phone}
                 onChangeText={setPhone}
                 keyboardType="phone-pad"
@@ -102,17 +103,16 @@ function SignUpScreen({ navigation }) {
                   style={styles.checkbox}
                   onPress={() => setAcceptTerms(!acceptTerms)}
                 >
-                  {acceptTerms && <View style={styles.checkboxInner} />}
+                  {acceptTerms && <View style={styles.checked} />}
                 </TouchableOpacity>
                 <Text style={styles.termsText}>
-                  I agree to all the <Text style={styles.termsLink}>Terms & Conditions</Text>
+                  I accept the terms and conditions
                 </Text>
               </View>
 
               <TouchableOpacity 
-                style={[styles.signUpButton, !acceptTerms && styles.signUpButtonDisabled]}
+                style={styles.signUpButton}
                 onPress={handleSignUp}
-                disabled={!acceptTerms}
               >
                 <Text style={styles.signUpButtonText}>Sign Up</Text>
               </TouchableOpacity>
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkboxInner: {
+  checked: {
     width: 10,
     height: 10,
     backgroundColor: COLORS.primary,
@@ -239,19 +239,12 @@ const styles = StyleSheet.create({
     fontSize: SIZES.fontSize.small,
     color: COLORS.gray,
   },
-  termsLink: {
-    color: COLORS.primary,
-    fontWeight: 'bold',
-  },
   signUpButton: {
     backgroundColor: COLORS.primary,
     padding: SIZES.padding * 0.7,
     borderRadius: SIZES.radius,
     alignItems: 'center',
     marginTop: SIZES.padding * 0.5,
-  },
-  signUpButtonDisabled: {
-    opacity: 0.6,
   },
   signUpButtonText: {
     color: COLORS.white,
@@ -317,6 +310,17 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: SIZES.fontSize.small,
     fontWeight: 'bold',
+  },
+  logo: {
+    width: '100%',
+    height: 100,
+    marginBottom: SIZES.padding * 2,
+  },
+  welcomeText: {
+    fontSize: SIZES.fontSize.title,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginBottom: SIZES.padding * 2,
   },
 });
 
