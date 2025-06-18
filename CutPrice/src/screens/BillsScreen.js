@@ -18,6 +18,7 @@ import { COLORS, SIZES, FONTS } from '../constants/theme';
 import StatusBar from '../components/StatusBar';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
+import { withBrownStatusBar } from '../utils/screenUtils';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 2;
@@ -31,7 +32,7 @@ const headerLogo = require('../../assets/header.png');
 const RECEIPTS_DIRECTORY = `${FileSystem.documentDirectory}receipts`;
 const SERVER_URL = 'http://10.0.0.169:3000';
 
-export default function BillsScreen({ navigation }) {
+function BillsScreen({ navigation }) {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -590,4 +591,6 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: 4,
   },
-}); 
+});
+
+export default withBrownStatusBar(BillsScreen); 

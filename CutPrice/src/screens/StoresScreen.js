@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants/theme';
 import StatusBar from '../components/StatusBar';
+import { withBrownStatusBar } from '../utils/screenUtils';
 
 const stores = [
   { id: 1, name: 'Walmart Supercenter', address: '123 Main St, City, State' },
@@ -10,7 +11,7 @@ const stores = [
   { id: 3, name: 'India Cash & Carry', address: '789 Commerce St, City, State' },
 ];
 
-export default function StoresScreen({ navigation }) {
+function StoresScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('Nearby');
 
   return (
@@ -144,4 +145,6 @@ const styles = StyleSheet.create({
     fontSize: SIZES.fontSize.body,
     color: COLORS.gray,
   },
-}); 
+});
+
+export default withBrownStatusBar(StoresScreen); 

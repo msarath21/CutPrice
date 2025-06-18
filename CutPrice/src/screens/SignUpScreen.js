@@ -12,8 +12,9 @@ import {
   Platform,
 } from 'react-native';
 import { COLORS, SIZES, SHADOWS } from '../constants/theme';
+import { withBrownStatusBar } from '../utils/screenUtils';
 
-export default function SignUpScreen({ navigation }) {
+function SignUpScreen({ navigation }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -317,4 +318,6 @@ const styles = StyleSheet.create({
     fontSize: SIZES.fontSize.small,
     fontWeight: 'bold',
   },
-}); 
+});
+
+export default withBrownStatusBar(SignUpScreen); 

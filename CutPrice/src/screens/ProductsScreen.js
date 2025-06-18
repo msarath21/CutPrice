@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants/theme';
-import StatusBar from '../components/StatusBar';
+import { withBrownStatusBar } from '../utils/screenUtils';
 import { searchItems } from '../utils/searchUtils';
 
 // Import the header image
@@ -22,7 +22,7 @@ const headerLogo = require('../../assets/header.png');
 
 const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
 
-export default function ProductsScreen({ route, navigation }) {
+function ProductsScreen({ route, navigation }) {
   const { category } = route.params;
   const [products, setProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,7 +83,6 @@ export default function ProductsScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar />
       <View style={styles.headerContainer}>
         <SafeAreaView style={styles.headerSafeArea}>
           <View style={styles.header}>
@@ -278,4 +277,6 @@ const styles = StyleSheet.create({
     color: COLORS.gray,
     textAlign: 'center',
   },
-}); 
+});
+
+export default withBrownStatusBar(ProductsScreen); 

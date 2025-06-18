@@ -14,13 +14,13 @@ import {
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants/theme';
-import StatusBar from '../components/StatusBar';
+import CustomStatusBar from '../components/StatusBar';
 import { searchItems } from '../utils/searchUtils';
 
 // Import the header image
 const headerLogo = require('../../assets/header.png');
 
-const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
+const STATUSBAR_HEIGHT = Platform.OS === 'android' ? RNStatusBar.currentHeight : 0;
 
 const categories = [
   { id: 1, name: 'Fruits &\nVegetables', icon: 'leaf', type: 'Ionicons', screen: 'Products' },
@@ -89,7 +89,8 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar />
+      <CustomStatusBar />
+      <View style={styles.statusBarBackground} />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.content}>
           <View style={styles.header}>
@@ -192,9 +193,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
+  statusBarBackground: {
+    height: STATUSBAR_HEIGHT,
+    backgroundColor: COLORS.primary,
+  },
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0,
   },
   content: {
     flex: 1,
