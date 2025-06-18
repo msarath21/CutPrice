@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
@@ -5,13 +6,15 @@ const path = require('path');
 const fs = require('fs');
 const ocrProcessor = require('./ocrProcessor');
 const excelGenerator = require('./excelGenerator');
+const mongoose = require('mongoose');
+const productRoutes = require('./routes/products');
+const storeRoutes = require('./routes/stores');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
-// Enable CORS
+// Middleware
 app.use(cors());
-// Increase payload size limit for base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -98,6 +101,12 @@ const saveBase64Image = (base64Data, filename) => {
 
 // Serve static files from the storage directory
 app.use('/images', express.static(storageDir));
+
+// Add request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 // Upload endpoint
 app.post('/upload', upload.single('image'), async (req, res) => {
@@ -244,8 +253,60 @@ app.get('/download-excel/:filename', (req, res) => {
     }
 });
 
+// Routes
+app.use('/api/products', productRoutes);
+app.use('/api/stores', storeRoutes);
+
+// MongoDB Connection
+const MONGODB_URI = 'mongodb://localhost:27017/cutprice';
+
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => {
+  console.log('Connected to MongoDB at:', MONGODB_URI);
+  console.log('Testing database connection...');
+  return mongoose.connection.db.admin().ping();
+})
+.then(() => {
+  console.log('MongoDB connection is healthy');
+  console.log('Available collections:', 
+    mongoose.connection.db.listCollections().toArray()
+    .then(collections => collections.map(c => c.name))
+    .then(names => console.log('Collections:', names))
+  );
+})
+.catch(err => {
+  console.error('MongoDB connection error:', err);
+  process.exit(1);
+});
+
+// Basic error handling
+mongoose.connection.on('error', err => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected');
+});
+
+process.on('SIGINT', async () => {
+  await mongoose.connection.close();
+  process.exit(0);
+});
+
+// Basic test route
+app.get('/api/test', (req, res) => {
+  res.json({ message: 'Server is running' });
+});
+
 // Start server
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Server running at http://localhost:${port}`);
-    console.log(`Storage directory: ${storageDir}`);
+const PORT = process.env.PORT || 3000;
+const HOST = '0.0.0.0'; // Listen on all network interfaces
+
+app.listen(PORT, HOST, () => {
+  console.log(`Server running at http://${HOST}:${PORT}`);
+  console.log(`For local access: http://localhost:${PORT}`);
+  console.log(`For network access: http://10.0.0.169:${PORT}`);
 }); 

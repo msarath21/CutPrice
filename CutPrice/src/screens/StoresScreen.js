@@ -1,18 +1,55 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, ActivityIndicator } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants/theme';
 import StatusBar from '../components/StatusBar';
 import { withBrownStatusBar } from '../utils/screenUtils';
 
-const stores = [
-  { id: 1, name: 'Walmart Supercenter', address: '123 Main St, City, State' },
-  { id: 2, name: 'Costco Wholesale', address: '456 Market St, City, State' },
-  { id: 3, name: 'India Cash & Carry', address: '789 Commerce St, City, State' },
+// Fallback data in case API fails
+const fallbackStores = [
+  { _id: 1, name: 'Walmart Supercenter', address: '123 Main St, City, State' },
+  { _id: 2, name: 'Costco Wholesale', address: '456 Market St, City, State' },
+  { _id: 3, name: 'India Cash & Carry', address: '789 Commerce St, City, State' },
 ];
 
 function StoresScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState('Nearby');
+  const [stores, setStores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchStores();
+  }, []);
+
+  const fetchStores = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('http://10.0.0.169:3000/api/stores');
+      if (!response.ok) {
+        throw new Error('Failed to fetch stores');
+      }
+      
+      const data = await response.json();
+      setStores(data);
+    } catch (err) {
+      console.error('Error fetching stores:', err);
+      setError('Failed to load stores');
+      setStores(fallbackStores);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -42,10 +79,14 @@ function StoresScreen({ navigation }) {
           ))}
         </View>
 
+        {error && (
+          <Text style={styles.errorText}>{error}</Text>
+        )}
+
         <View style={styles.storeList}>
           {stores.map(store => (
             <TouchableOpacity 
-              key={store.id}
+              key={store._id}
               style={styles.storeCard}
               onPress={() => navigation.navigate('StoreDetails', { store })}
             >
@@ -67,6 +108,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.white,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   safeArea: {
     flex: 1,
@@ -144,6 +189,11 @@ const styles = StyleSheet.create({
   storeAddress: {
     fontSize: SIZES.fontSize.body,
     color: COLORS.gray,
+  },
+  errorText: {
+    color: COLORS.error,
+    textAlign: 'center',
+    padding: SIZES.padding,
   },
 });
 

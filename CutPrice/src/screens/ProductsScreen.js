@@ -15,7 +15,7 @@ import {
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES } from '../constants/theme';
 import { withBrownStatusBar } from '../utils/screenUtils';
-import { searchItems } from '../utils/searchUtils';
+import { productService } from '../services/api';
 
 // Import the header image
 const headerLogo = require('../../assets/header.png');
@@ -23,20 +23,24 @@ const headerLogo = require('../../assets/header.png');
 const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
 
 function ProductsScreen({ route, navigation }) {
-  const { category } = route.params;
   const [products, setProducts] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const { storeName } = route.params || {};
 
   useEffect(() => {
     loadProducts();
-  }, [category]);
+  }, [storeName]);
 
   const loadProducts = async () => {
-    setLoading(true);
     try {
-      const results = await searchItems(category);
-      setProducts(results);
+      setLoading(true);
+      let data;
+      if (storeName) {
+        data = await productService.getProductsByStore(storeName);
+      } else {
+        data = await productService.getAllProducts();
+      }
+      setProducts(data);
     } catch (error) {
       console.error('Error loading products:', error);
     } finally {
@@ -44,41 +48,21 @@ function ProductsScreen({ route, navigation }) {
     }
   };
 
-  const handleSearch = async (text) => {
-    setSearchQuery(text);
-    if (text.length >= 2) {
-      setLoading(true);
-      const results = await searchItems(text);
-      setProducts(results);
-      setLoading(false);
-    } else if (text.length === 0) {
-      loadProducts();
-    }
-  };
-
   const renderProduct = ({ item }) => (
-    <View style={styles.productCard}>
+    <TouchableOpacity
+      style={styles.productCard}
+      onPress={() => navigation.navigate('ProductDetails', { product: item })}
+    >
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.Item}</Text>
-        <Text style={styles.storeName}>{item.store}</Text>
-        <View style={styles.priceContainer}>
-          <Text 
-            style={[
-              styles.price,
-              item.priceType === 'lowest' && styles.lowestPrice,
-              item.priceType === 'highest' && styles.highestPrice,
-            ]}
-          >
-            ${item.Price}
-          </Text>
-          {item.Organic === 'Yes' && (
-            <View style={styles.organicBadge}>
-              <Text style={styles.organicText}>Organic</Text>
-            </View>
-          )}
-        </View>
+        <Text style={styles.productName}>{item.name}</Text>
+        <Text style={styles.productUnit}>{item.unit}</Text>
+        <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
+        <Text style={styles.productRating}>Rating: {item.rating.toFixed(1)}</Text>
+        {item.isOrganic && (
+          <Text style={styles.organicLabel}>Organic</Text>
+        )}
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -100,29 +84,9 @@ function ProductsScreen({ route, navigation }) {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>{category}</Text>
-
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search products..."
-            placeholderTextColor={COLORS.gray}
-            value={searchQuery}
-            onChangeText={handleSearch}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity 
-              style={styles.clearButton}
-              onPress={() => {
-                setSearchQuery('');
-                loadProducts();
-              }}
-            >
-              <Ionicons name="close-circle" size={20} color={COLORS.gray} />
-            </TouchableOpacity>
-          )}
-        </View>
+        <Text style={styles.title}>
+          {storeName ? `${storeName} Products` : 'All Products'}
+        </Text>
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -132,7 +96,7 @@ function ProductsScreen({ route, navigation }) {
           <FlatList
             data={products}
             renderItem={renderProduct}
-            keyExtractor={(item, index) => `${item.Item}-${item.store}-${index}`}
+            keyExtractor={(item) => `${item._id}`}
             contentContainerStyle={styles.productsList}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={() => (
@@ -188,94 +152,69 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: SIZES.fontSize.title,
-    fontWeight: '600',
-    color: COLORS.black,
-    marginBottom: SIZES.padding,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    marginBottom: SIZES.padding,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 24,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.black,
-  },
-  clearButton: {
-    padding: 4,
-  },
-  productsList: {
-    gap: SIZES.padding,
-  },
-  productCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radius,
-    padding: SIZES.padding,
-    borderWidth: 1,
-    borderColor: COLORS.lightGray,
-  },
-  productInfo: {
-    gap: 4,
-  },
-  productName: {
-    fontSize: SIZES.fontSize.subtitle,
-    fontWeight: '500',
-    color: COLORS.black,
-  },
-  storeName: {
-    fontSize: SIZES.fontSize.body,
-    color: COLORS.gray,
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  price: {
-    fontSize: SIZES.fontSize.subtitle,
-    fontWeight: '600',
-    color: COLORS.black,
-  },
-  lowestPrice: {
-    color: '#2E7D32', // Dark green
-  },
-  highestPrice: {
-    color: '#C62828', // Dark red
-  },
-  organicBadge: {
-    backgroundColor: '#E6F4EA',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  organicText: {
-    fontSize: 12,
-    color: '#1E8E3E',
+    fontWeight: 'bold',
+    color: COLORS.primary,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  productsList: {
+    padding: SIZES.padding,
+  },
+  productCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    padding: SIZES.padding,
+    marginBottom: SIZES.padding,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.black,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
+  productInfo: {
+    gap: SIZES.padding * 0.2,
+  },
+  productName: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontWeight: 'bold',
+    color: COLORS.black,
+  },
+  productUnit: {
+    fontSize: SIZES.fontSize.small,
+    color: COLORS.gray,
+  },
+  productPrice: {
+    fontSize: SIZES.fontSize.body,
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  productRating: {
+    fontSize: SIZES.fontSize.small,
+    color: COLORS.gray,
+  },
+  organicLabel: {
+    fontSize: SIZES.fontSize.small,
+    color: COLORS.success,
+    fontWeight: 'bold',
+  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 32,
+    padding: SIZES.padding * 2,
   },
   emptyStateText: {
     fontSize: SIZES.fontSize.body,
     color: COLORS.gray,
-    textAlign: 'center',
   },
 });
 

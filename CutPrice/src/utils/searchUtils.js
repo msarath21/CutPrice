@@ -1,71 +1,26 @@
-import * as FileSystem from 'expo-file-system';
-import * as Asset from 'expo-asset';
-
-const parseCSVData = (csvContent) => {
-  const lines = csvContent.trim().split('\n');
-  const headers = lines[0].split(',');
-  
-  return lines.slice(1).map(line => {
-    const values = line.split(',');
-    return headers.reduce((obj, header, index) => {
-      obj[header] = values[index];
-      return obj;
-    }, {});
-  });
-};
+import { COLORS } from '../constants/theme';
 
 export const searchItems = async (searchQuery) => {
   try {
-    const stores = [
-      { name: 'Walmart Supercenter', file: 'Walmart_Inventory.csv' },
-      { name: 'Costco Wholesale', file: 'Costco_Inventory.csv' },
-      { name: 'India Cash & Carry', file: 'Indian_Store_Inventory.csv' },
-    ];
-
-    const results = [];
-    const storesDir = `${FileSystem.documentDirectory}stores`;
-
-    for (const store of stores) {
-      try {
-        const filePath = `${storesDir}/${store.file}`;
-        const fileInfo = await FileSystem.getInfoAsync(filePath);
-        
-        if (!fileInfo.exists) {
-          console.warn(`Store file not found: ${store.file}`);
-          continue;
-        }
-
-        const fileContent = await FileSystem.readAsStringAsync(filePath);
-        const items = parseCSVData(fileContent);
-        
-        const matchingItems = items.filter(item => 
-          item.Item.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-
-        matchingItems.forEach(item => {
-          results.push({
-            ...item,
-            store: store.name,
-            priceNum: parseFloat(item.Price)
-          });
-        });
-      } catch (storeError) {
-        console.error(`Error processing store ${store.name}:`, storeError);
-      }
+    const response = await fetch(`http://10.0.0.169:3000/api/products/search?q=${encodeURIComponent(searchQuery)}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch search results');
     }
+
+    const results = await response.json();
 
     if (results.length > 0) {
       // Sort by price
-      results.sort((a, b) => a.priceNum - b.priceNum);
+      results.sort((a, b) => a.price - b.price);
       
       // Mark best and worst prices
-      const lowestPrice = results[0].priceNum;
-      const highestPrice = results[results.length - 1].priceNum;
+      const lowestPrice = results[0].price;
+      const highestPrice = results[results.length - 1].price;
       
       results.forEach(item => {
-        if (item.priceNum === lowestPrice) {
+        if (item.price === lowestPrice) {
           item.priceType = 'lowest';
-        } else if (item.priceNum === highestPrice) {
+        } else if (item.price === highestPrice) {
           item.priceType = 'highest';
         } else {
           item.priceType = 'normal';
