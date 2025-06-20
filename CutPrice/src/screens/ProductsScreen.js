@@ -11,6 +11,7 @@ import {
   Platform,
   StatusBar as RNStatusBar,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES, SHADOWS, FONTS } from '../constants/theme';
@@ -22,25 +23,98 @@ const headerLogo = require('../../assets/header.png');
 
 const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
 
+function PriceComparisonModal({ visible, onClose, productName, prices }) {
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{productName}</Text>
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.priceList}>
+            {prices.map((item, index) => (
+              <View key={index} style={styles.priceItem}>
+                <Text style={styles.storeName}>{item.store}</Text>
+                <Text style={[
+                  styles.priceText,
+                  item.isLowest && styles.lowestPrice,
+                  item.isHighest && styles.highestPrice
+                ]}>
+                  ${Number(item.price).toFixed(2)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function ProductsScreen({ route, navigation }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { storeName } = route.params || {};
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const { storeName, category, categoryId } = route.params || {};
 
   useEffect(() => {
     loadProducts();
-  }, [storeName]);
+  }, [storeName, category]);
 
   const loadProducts = async () => {
     try {
       setLoading(true);
       let data;
-      if (storeName) {
+      if (category) {
+        // Get products by category
+        data = await productService.getProductsByCategory(category);
+      } else if (storeName) {
+        // Get products by store
         data = await productService.getProductsByStore(storeName);
       } else {
+        // Get all products
         data = await productService.getAllProducts();
       }
-      setProducts(data);
+
+      // Group products by name and find min/max prices
+      const groupedProducts = data.reduce((acc, product) => {
+        if (!acc[product.name]) {
+          acc[product.name] = {
+            name: product.name,
+            unit: product.unit,
+            category: product.category,
+            prices: [],
+            lowestPrice: Infinity,
+            highestPrice: -Infinity
+          };
+        }
+        acc[product.name].prices.push({
+          store: product.store,
+          price: product.price,
+          is_organic: product.is_organic
+        });
+        
+        if (product.price < acc[product.name].lowestPrice) {
+          acc[product.name].lowestPrice = product.price;
+        }
+        if (product.price > acc[product.name].highestPrice) {
+          acc[product.name].highestPrice = product.price;
+        }
+        
+        return acc;
+      }, {});
+
+      setProducts(Object.values(groupedProducts));
     } catch (error) {
       console.error('Error loading products:', error);
     } finally {
@@ -48,19 +122,32 @@ function ProductsScreen({ route, navigation }) {
     }
   };
 
+  const handleProductPress = (product) => {
+    const sortedPrices = product.prices.map(price => ({
+      ...price,
+      isLowest: price.price === product.lowestPrice,
+      isHighest: price.price === product.highestPrice
+    })).sort((a, b) => a.price - b.price);
+
+    setSelectedProduct({
+      name: product.name,
+      prices: sortedPrices
+    });
+    setModalVisible(true);
+  };
+
   const renderProduct = ({ item }) => (
     <TouchableOpacity
       style={styles.productCard}
-      onPress={() => navigation.navigate('ProductDetails', { product: item })}
+      onPress={() => handleProductPress(item)}
     >
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productUnit}>{item.unit}</Text>
-        <Text style={styles.productPrice}>${Number(item.price).toFixed(2)}</Text>
-        <Text style={styles.productRating}>Rating: {Number(item.rating || 0).toFixed(1)}</Text>
-        {item.is_organic && (
-          <Text style={styles.organicLabel}>Organic</Text>
-        )}
+        <Text style={styles.priceRange}>
+          ${Number(item.lowestPrice).toFixed(2)} - ${Number(item.highestPrice).toFixed(2)}
+        </Text>
+        <Text style={styles.storeCount}>{item.prices.length} stores available</Text>
       </View>
     </TouchableOpacity>
   );
@@ -85,7 +172,7 @@ function ProductsScreen({ route, navigation }) {
 
       <View style={styles.content}>
         <Text style={styles.title}>
-          {storeName ? `${storeName} Products` : 'All Products'}
+          {category ? `${category}` : storeName ? `${storeName} Products` : 'All Products'}
         </Text>
 
         {loading ? (
@@ -96,7 +183,7 @@ function ProductsScreen({ route, navigation }) {
           <FlatList
             data={products}
             renderItem={renderProduct}
-            keyExtractor={(item) => item.id.toString()}
+            keyExtractor={(item) => item.name}
             contentContainerStyle={styles.productsList}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={() => (
@@ -107,6 +194,13 @@ function ProductsScreen({ route, navigation }) {
           />
         )}
       </View>
+
+      <PriceComparisonModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        productName={selectedProduct?.name}
+        prices={selectedProduct?.prices || []}
+      />
     </View>
   );
 }
@@ -179,20 +273,10 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radius,
     padding: SIZES.padding,
     marginBottom: SIZES.padding,
-    ...Platform.select({
-      ios: {
-        shadowColor: COLORS.black,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    ...SHADOWS.medium,
   },
   productInfo: {
-    gap: SIZES.padding * 0.2,
+    gap: SIZES.base,
   },
   productName: {
     fontSize: SIZES.fontSize.subtitle,
@@ -200,22 +284,17 @@ const styles = StyleSheet.create({
     color: COLORS.black,
   },
   productUnit: {
-    fontSize: SIZES.fontSize.small,
+    fontSize: SIZES.fontSize.body,
     color: COLORS.gray,
   },
-  productPrice: {
-    fontSize: SIZES.fontSize.body,
+  priceRange: {
+    fontSize: SIZES.fontSize.subtitle,
     color: COLORS.primary,
     fontWeight: 'bold',
   },
-  productRating: {
-    fontSize: SIZES.fontSize.small,
+  storeCount: {
+    fontSize: SIZES.fontSize.body,
     color: COLORS.gray,
-  },
-  organicLabel: {
-    fontSize: SIZES.fontSize.small,
-    color: COLORS.success,
-    fontWeight: 'bold',
   },
   emptyState: {
     flex: 1,
@@ -226,6 +305,55 @@ const styles = StyleSheet.create({
   emptyStateText: {
     fontSize: SIZES.fontSize.body,
     color: COLORS.gray,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: SIZES.radius * 2,
+    borderTopRightRadius: SIZES.radius * 2,
+    padding: SIZES.padding,
+    minHeight: '50%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SIZES.padding,
+  },
+  modalTitle: {
+    fontSize: SIZES.fontSize.title,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  priceList: {
+    gap: SIZES.padding,
+  },
+  priceItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: SIZES.padding / 2,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  storeName: {
+    fontSize: SIZES.fontSize.subtitle,
+    color: COLORS.black,
+  },
+  priceText: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontWeight: 'bold',
+    color: COLORS.black,
+  },
+  lowestPrice: {
+    color: COLORS.success,
+  },
+  highestPrice: {
+    color: COLORS.error,
   },
 });
 

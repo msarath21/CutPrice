@@ -1,4 +1,3 @@
-import { mockProducts } from './mockData';
 import supabase from '../config/supabase';
 
 // Replace localhost with your computer's IP address
@@ -116,6 +115,23 @@ export const productService = {
       return data;
     } catch (error) {
       console.error('Error fetching products:', error);
+      throw error;
+    }
+  },
+
+  // Get products by category
+  getProductsByCategory: async (category) => {
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select('*')
+        .eq('category', category)
+        .order('name');
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error fetching products by category:', error);
       throw error;
     }
   },

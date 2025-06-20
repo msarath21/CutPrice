@@ -1,200 +1,78 @@
--- Drop functions if they exist
-DROP FUNCTION IF EXISTS import_products_from_csv();
-DROP FUNCTION IF EXISTS import_stores_from_csv();
-
--- Drop tables if they exist
-DROP TABLE IF EXISTS products;
-DROP TABLE IF EXISTS stores;
-
-CREATE EXTENSION IF NOT EXISTS "postgis";
-CREATE EXTENSION IF NOT EXISTS "http";
-
--------------
-
-CREATE TABLE IF NOT EXISTS stores (
+-- Create products table
+CREATE TABLE products (
     id SERIAL PRIMARY KEY,
-    name TEXT UNIQUE NOT NULL,
-    address TEXT NOT NULL,
-    location GEOMETRY(Point, 4326) NOT NULL,
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    product_id VARCHAR(10) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    category VARCHAR(50) NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    barcode VARCHAR(20),
+    price DECIMAL(10,2),
+    store VARCHAR(100),
+    is_organic BOOLEAN DEFAULT false,
+    rating DECIMAL(3,1),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
-CREATE TABLE IF NOT EXISTS products (
+-- Create categories table
+CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    price NUMERIC(10,2) NOT NULL,
-    rating NUMERIC(3,1) CHECK (rating >= 0 AND rating <= 5),
-    "isOrganic" BOOLEAN NOT NULL DEFAULT false,
-    store TEXT NOT NULL REFERENCES stores(name),
-    category TEXT NOT NULL,
-    unit TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(name, store)
+    category_id VARCHAR(10) UNIQUE NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    image_url VARCHAR(200),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW())
 );
 
-----------------------------------
+-- Insert categories data
+INSERT INTO categories (category_id, name) VALUES
+('C001', 'Dairy'),
+('C002', 'Produce'),
+('C003', 'Meat'),
+('C004', 'Bakery'),
+('C005', 'Grains'),
+('C006', 'Beverages'),
+('C007', 'Snacks'),
+('C008', 'Breakfast'),
+('C009', 'Household'),
+('C010', 'Baking');
 
-CREATE OR REPLACE FUNCTION import_products_from_csv()
-RETURNS text
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  csv_data text;
-  row_count int := 0;
+-- Insert sample products data
+INSERT INTO products (product_id, name, category, unit, barcode, price, store, is_organic) VALUES
+('P001', 'Milk 1 Gallon', 'Dairy', 'gallon', '123456789001', 3.99, 'Walmart', false),
+('P002', 'White Bread', 'Bakery', 'loaf', '123456789002', 2.49, 'Target', false),
+('P003', 'Bananas', 'Produce', 'lb', '123456789003', 0.59, 'Walmart', true),
+('P004', 'Ground Beef', 'Meat', 'lb', '123456789004', 4.99, 'Costco', false),
+('P005', 'Eggs Large', 'Dairy', 'dozen', '123456789005', 3.29, 'Target', false),
+('P006', 'Orange Juice', 'Beverages', 'gallon', '123456789006', 4.99, 'Walmart', true),
+('P007', 'Chicken Breast', 'Meat', 'lb', '123456789007', 3.99, 'Costco', false),
+('P008', 'Rice 5lb Bag', 'Grains', 'bag', '123456789008', 5.99, 'Target', false),
+('P009', 'Tomatoes', 'Produce', 'lb', '123456789009', 1.99, 'Walmart', true),
+('P010', 'Cheddar Cheese', 'Dairy', 'lb', '123456789010', 4.99, 'Costco', false);
+
+-- Create indexes for better query performance
+CREATE INDEX idx_products_category ON products(category);
+CREATE INDEX idx_products_store ON products(store);
+CREATE INDEX idx_products_name ON products(name);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+
+-- Create policy to allow anonymous read access
+CREATE POLICY "Allow anonymous read access" ON products FOR SELECT USING (true);
+CREATE POLICY "Allow anonymous read access" ON categories FOR SELECT USING (true);
+
+-- Function to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
 BEGIN
-  -- Read CSV file from URL
-  SELECT content::text INTO csv_data 
-  FROM http_get('https://hlrjjkbtkbzzklxhsduj.supabase.co/storage/v1/object/public/import-data//products.csv');
-
-  -- Create temporary table to hold CSV data
-  DROP TABLE IF EXISTS temp_products;
-  CREATE TEMP TABLE temp_products (
-    name text,
-    price numeric,
-    rating numeric,
-    is_organic boolean,
-    store text,
-    category text,
-    unit text
-  );
-
-  -- Insert data from CSV into temp table, skipping the header row
-  INSERT INTO temp_products
-  SELECT 
-    (string_to_array(line, ','))[1]::text as name,
-    (string_to_array(line, ','))[2]::numeric as price,
-    (string_to_array(line, ','))[3]::numeric as rating,
-    (string_to_array(line, ','))[4]::boolean as is_organic,
-    (string_to_array(line, ','))[5]::text as store,
-    (string_to_array(line, ','))[6]::text as category,
-    (string_to_array(line, ','))[7]::text as unit
-  FROM regexp_split_to_table(csv_data, E'\n') as line
-  WHERE line != '' -- Skip empty lines
-  AND line NOT LIKE 'name,price%'; -- Skip header row
-
-  -- Insert data from temp table into products table
-  INSERT INTO products (name, price, rating, "isOrganic", store, category, unit)
-  SELECT 
-    t.name,
-    t.price,
-    t.rating,
-    t.is_organic,
-    t.store,
-    t.category,
-    t.unit
-  FROM temp_products t
-  ON CONFLICT (name, store) DO UPDATE
-  SET 
-    price = EXCLUDED.price,
-    rating = EXCLUDED.rating,
-    "isOrganic" = EXCLUDED."isOrganic",
-    category = EXCLUDED.category,
-    unit = EXCLUDED.unit;
-
-  GET DIAGNOSTICS row_count = ROW_COUNT;
-
-  -- Clean up
-  DROP TABLE IF EXISTS temp_products;
-
-  RETURN 'Successfully imported ' || row_count || ' products';
+    NEW.updated_at = TIMEZONE('utc'::text, NOW());
+    RETURN NEW;
 END;
-$$;
+$$ language 'plpgsql';
 
------------------------
-CREATE OR REPLACE FUNCTION import_stores_from_csv()
-RETURNS text
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-DECLARE
-  csv_data text;
-  row_count int := 0;
-BEGIN
-  -- Read CSV file from URL
-  SELECT content::text INTO csv_data 
-  FROM http_get('https://hlrjjkbtkbzzklxhsduj.supabase.co/storage/v1/object/public/import-data//stores.csv');
-
-  -- Create temporary table to hold CSV data
-  DROP TABLE IF EXISTS temp_stores;
-  CREATE TEMP TABLE temp_stores (
-    name text,
-    address text,
-    latitude float8,
-    longitude float8,
-    is_active boolean
-  );
-
-  -- Insert data from CSV into temp table, skipping the header row
-  INSERT INTO temp_stores
-  SELECT 
-    (string_to_array(line, ','))[1]::text as name,
-    (string_to_array(line, ','))[2]::text as address,
-    (string_to_array(line, ','))[3]::float8 as latitude,
-    (string_to_array(line, ','))[4]::float8 as longitude,
-    (string_to_array(line, ','))[5]::boolean as is_active
-  FROM regexp_split_to_table(csv_data, E'\n') as line
-  WHERE line != '' -- Skip empty lines
-  AND line NOT LIKE 'name,address%'; -- Skip header row
-
-  -- Insert data from temp table into stores table
-  INSERT INTO stores (name, address, location, "isActive")
-  SELECT 
-    t.name,
-    t.address,
-    ST_SetSRID(ST_MakePoint(t.longitude, t.latitude), 4326),
-    t.is_active
-  FROM temp_stores t
-  ON CONFLICT (name) DO UPDATE
-  SET 
-    address = EXCLUDED.address,
-    location = EXCLUDED.location,
-    "isActive" = EXCLUDED."isActive";
-
-  GET DIAGNOSTICS row_count = ROW_COUNT;
-
-  -- Clean up
-  DROP TABLE IF EXISTS temp_stores;
-
-  RETURN 'Successfully imported ' || row_count || ' stores';
-END;
-$$;
-----------------------
-SELECT import_stores_from_csv();
-SELECT import_products_from_csv();
----------------------------------
-
-SELECT column_name, data_type 
-FROM information_schema.columns 
-WHERE table_schema = 'storage' 
-AND table_name = 'objects';
-
--------------------------
--- Check stores data
-SELECT name, address, ST_AsText(location) as location, "isActive" 
-FROM stores 
-ORDER BY name;
-
--- Check products data
-SELECT name, price, rating, "isOrganic", store, category, unit 
-FROM products 
-ORDER BY category, name;
-
--- Get some basic statistics
-SELECT 
-    COUNT(*) as total_stores,
-    COUNT(*) FILTER (WHERE "isActive" = true) as active_stores
-FROM stores;
-
-SELECT 
-    category,
-    COUNT(*) as product_count,
-    AVG(price)::numeric(10,2) as avg_price,
-    AVG(rating)::numeric(3,1) as avg_rating
-FROM products
-GROUP BY category
-ORDER BY category;
------------------
+-- Create trigger to automatically update updated_at
+CREATE TRIGGER update_products_updated_at
+    BEFORE UPDATE ON products
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column(); 
