@@ -1,0 +1,21 @@
+product_id,name,category,unit,barcode
+P001,Milk 1 Gallon,Dairy,gallon,123456789001
+P002,White Bread,Bakery,loaf,123456789002
+P003,Bananas,Produce,lb,123456789003
+P004,Ground Beef,Meat,lb,123456789004
+P005,Eggs Large,Dairy,dozen,123456789005
+P006,Orange Juice,Beverages,gallon,123456789006
+P007,Chicken Breast,Meat,lb,123456789007
+P008,Rice 5lb Bag,Grains,bag,123456789008
+P009,Tomatoes,Produce,lb,123456789009
+P010,Cheddar Cheese,Dairy,lb,123456789010
+P011,Apple Red,Produce,lb,123456789011
+P012,Pasta Spaghetti,Grains,pack,123456789012
+P013,Yogurt Plain,Dairy,tub,123456789013
+P014,Potato Chips,Snacks,bag,123456789014
+P015,Cereal Corn Flakes,Breakfast,box,123456789015
+P016,Carrots,Produce,lb,123456789016
+P017,Paper Towels,Household,pack,123456789017
+P018,Dish Soap,Household,bottle,123456789018
+P019,Coffee Ground,Beverages,bag,123456789019
+P020,Sugar,Baking,lb,123456789020 

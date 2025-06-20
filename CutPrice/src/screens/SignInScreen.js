@@ -20,11 +20,17 @@ function SignInScreen({ navigation }) {
 
   const handleSignIn = () => {
     // TODO: Implement your own authentication logic here
-    navigation.replace('Home');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
   };
 
   const handleGuestLogin = () => {
-    navigation.replace('Home');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
   };
 
   return (

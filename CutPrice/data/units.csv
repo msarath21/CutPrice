@@ -1,0 +1,11 @@
+unit_id,unit_name,unit_symbol
+U001,pound,lb
+U002,gallon,gal
+U003,each,ea
+U004,dozen,doz
+U005,pack,pk
+U006,bag,bag
+U007,box,box
+U008,bottle,btl
+U009,tub,tub
+U010,loaf,loaf 

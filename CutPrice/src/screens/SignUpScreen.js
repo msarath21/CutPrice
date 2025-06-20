@@ -24,11 +24,11 @@ function SignUpScreen({ navigation }) {
 
   const handleSignUp = () => {
     // TODO: Implement your own sign up logic here
-    navigation.replace('Home');
+    navigation.replace('MainTabs');
   };
 
   const handleGuestLogin = () => {
-    navigation.replace('Home');
+    navigation.replace('MainTabs');
   };
 
   return (

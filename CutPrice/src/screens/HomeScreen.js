@@ -1,183 +1,109 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  FlatList,
-  TextInput,
-  ActivityIndicator,
-  Image,
-  Platform,
-  StatusBar as RNStatusBar,
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
   SafeAreaView,
+  TouchableOpacity,
+  Image,
+  ScrollView,
+  TextInput,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
-import CustomStatusBar from '../components/StatusBar';
-import { searchItems } from '../utils/searchUtils';
+import { COLORS, SIZES, SHADOWS } from '../constants/theme';
+import { Ionicons } from '@expo/vector-icons';
 
-// Import the header image
-const headerLogo = require('../../assets/header.png');
+const { width } = Dimensions.get('window');
+const cardWidth = (width - (SIZES.padding * 3)) / 2;
 
 const categories = [
-  { id: 1, name: 'Fruits &\nVegetables', icon: 'leaf', type: 'Ionicons', screen: 'Products' },
-  { id: 2, name: 'Dairy & Eggs', icon: 'egg', type: 'Ionicons', screen: 'Products' },
-  { id: 3, name: 'Beverages', icon: 'beer', type: 'Ionicons', screen: 'Products' },
-  { id: 4, name: 'Snacks', icon: 'restaurant', type: 'Ionicons', screen: 'Products' },
-  { id: 5, name: 'Bills', icon: 'receipt', type: 'MaterialIcons', screen: 'Bills' },
+  { id: 'C001', name: 'Dairy', image: require('../../assets/catogery/diary.png') },
+  { id: 'C002', name: 'Produce', image: require('../../assets/catogery/produce.png') },
+  { id: 'C003', name: 'Meat', image: require('../../assets/catogery/meat.png') },
+  { id: 'C004', name: 'Bakery', image: require('../../assets/catogery/bakery.png') },
+  { id: 'C005', name: 'Grains', image: require('../../assets/catogery/grains.png') },
+  { id: 'C006', name: 'Beverages', image: require('../../assets/catogery/bevarages.png') },
+  { id: 'C007', name: 'Snacks', image: require('../../assets/catogery/snacks.png') },
+  { id: 'C008', name: 'Breakfast', image: require('../../assets/catogery/breakfast.png') },
+  { id: 'C009', name: 'Household', image: require('../../assets/catogery/household.png') },
+  { id: 'C010', name: 'Baking', image: require('../../assets/catogery/backing.png') },
 ];
 
 export default function HomeScreen({ navigation }) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showResults, setShowResults] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  // Memoize categories to prevent unnecessary re-renders
-  const memoizedCategories = useMemo(() => categories, []);
-
-  // Debounce search to prevent too many API calls
-  const handleSearch = useCallback(async (text) => {
-    setSearchQuery(text);
-    if (text.length >= 2) {
-      setLoading(true);
-      setShowResults(true);
-      // Add delay to prevent too frequent API calls
-      const timeoutId = setTimeout(async () => {
-        const results = await searchItems(text);
-        setSearchResults(results);
-        setLoading(false);
-      }, 300);
-      return () => clearTimeout(timeoutId);
-    } else {
-      setShowResults(false);
-      setSearchResults([]);
-    }
-  }, []);
-
-  // Memoize render functions to prevent recreating on every render
-  const renderSearchResult = useCallback(({ item }) => (
-    <View style={styles.searchResultItem}>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.storeName}>{item.store}</Text>
-      </View>
-      <View style={styles.priceContainer}>
-        <Text 
-          style={[
-            styles.price,
-            item.priceType === 'lowest' && styles.lowestPrice,
-            item.priceType === 'highest' && styles.highestPrice,
-          ]}
-        >
-          ${Number(item.price).toFixed(2)}
-        </Text>
-        {item.is_organic && (
-          <View style={styles.organicBadge}>
-            <Text style={styles.organicText}>Organic</Text>
-          </View>
-        )}
-      </View>
-    </View>
-  ), []);
-
-  const keyExtractor = useCallback((item, index) => 
-    `${item.name}-${item.store}-${index}`, []);
-
   return (
-    <View style={styles.container}>
-      <CustomStatusBar />
-      <View style={styles.statusBarBackground} />
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.headerContainer}>
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.headerButton}
-              onPress={() => navigation.navigate('Stores')}
-            >
-              <MaterialIcons name="location-on" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-            <Image source={headerLogo} style={styles.logo} resizeMode="contain" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar backgroundColor={COLORS.white} barStyle="dark-content" />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <Image 
+          source={require('../../assets/header.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            style={styles.storeButton}
+            onPress={() => navigation.navigate('Stores')}
+          >
+            <Ionicons name="location" size={24} color={COLORS.primary} />
+            <Text style={styles.storeButtonText}>Stores</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={() => navigation.navigate('Notifications')}
+          >
+            <Ionicons name="notifications-outline" size={24} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Promo Banner */}
+      <View style={styles.promoBanner}>
+        <Image
+          source={require('../../assets/catogery/promo-banner.png')}
+          style={styles.promoBannerImage}
+          resizeMode="cover"
+        />
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color={COLORS.gray} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search products..."
+          placeholderTextColor={COLORS.gray}
+        />
+      </View>
+
+      {/* Categories Grid */}
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        <View style={styles.categoriesGrid}>
+          {categories.map((category) => (
             <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => alert('Profile feature coming soon!')}
+              key={category.id}
+              style={styles.categoryCard}
+              onPress={() => navigation.navigate('Products', { 
+                category: category.name,
+                categoryId: category.id 
+              })}
             >
-              <MaterialIcons name="person" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <Ionicons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search products..."
-              placeholderTextColor={COLORS.gray}
-              value={searchQuery}
-              onChangeText={handleSearch}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity 
-                onPress={() => {
-                  setSearchQuery('');
-                  setShowResults(false);
-                  setSearchResults([]);
-                }}
-              >
-                <Ionicons name="close-circle" size={20} color={COLORS.gray} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {showResults ? (
-          <View style={styles.searchResultsContainer}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color={COLORS.primary} />
-              </View>
-            ) : searchResults.length > 0 ? (
-              <FlatList
-                data={searchResults}
-                renderItem={renderSearchResult}
-                keyExtractor={keyExtractor}
-                contentContainerStyle={styles.searchResultsList}
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-                initialNumToRender={10}
+              <Image
+                source={category.image}
+                style={styles.categoryImage}
+                resizeMode="cover"
               />
-            ) : (
-              <View style={styles.noResultsContainer}>
-                <Text style={styles.noResultsText}>No items found</Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <View style={styles.categoriesContainer}>
-            {memoizedCategories.map((category, index) => (
-              <TouchableOpacity
-                key={category.id}
-                style={[
-                  styles.categoryCard,
-                  index === categories.length - 1 && styles.fullWidthCard
-                ]}
-                onPress={() => navigation.navigate(category.screen, { category: category.name })}
-              >
-                {category.type === 'Ionicons' ? (
-                  <Ionicons name={category.icon} size={32} color={COLORS.white} />
-                ) : (
-                  <MaterialIcons name={category.icon} size={32} color={COLORS.white} />
-                )}
-                <Text style={styles.categoryText}>{category.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-      </SafeAreaView>
-    </View>
+              <Text style={styles.categoryName}>{category.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -186,157 +112,90 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  statusBarBackground: {
-    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
-    backgroundColor: COLORS.primary,
-  },
-  safeArea: {
-    flex: 1,
-  },
-  headerContainer: {
-    backgroundColor: COLORS.white,
-    ...SHADOWS.light,
-  },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: SIZES.padding,
-    paddingTop: SIZES.padding * 1.5,
-    paddingBottom: SIZES.padding,
-    backgroundColor: COLORS.white,
-  },
-  headerButton: {
-    padding: SIZES.base,
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radius,
-    ...SHADOWS.light,
+    paddingTop: SIZES.padding,
+    paddingBottom: SIZES.padding / 2,
   },
   logo: {
+    width: 100,
     height: 40,
-    width: 120,
   },
-  searchContainer: {
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  storeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: SIZES.padding,
+    backgroundColor: COLORS.lightGray,
+    padding: SIZES.base,
+    borderRadius: SIZES.radius,
+  },
+  storeButtonText: {
+    marginLeft: 4,
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  notificationButton: {
+    padding: SIZES.base,
+  },
+  promoBanner: {
     paddingHorizontal: SIZES.padding,
     marginBottom: SIZES.padding,
   },
-  searchInputContainer: {
+  promoBannerImage: {
+    width: '100%',
+    height: 120,
+    borderRadius: SIZES.radius,
+  },
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.inputBackground,
+    paddingHorizontal: SIZES.padding * 1.5,
+    paddingVertical: SIZES.base,
+    backgroundColor: COLORS.lightGray,
+    marginHorizontal: SIZES.padding,
     borderRadius: SIZES.radius,
-    paddingHorizontal: SIZES.padding,
-    height: 48,
-  },
-  searchIcon: {
-    marginRight: SIZES.base,
+    marginBottom: SIZES.padding,
   },
   searchInput: {
     flex: 1,
-    height: 40,
+    marginLeft: SIZES.base,
     fontSize: SIZES.font,
-    fontFamily: FONTS.regular,
     color: COLORS.black,
   },
-  categoriesContainer: {
-    flex: 1,
+  scrollContent: {
+    paddingHorizontal: SIZES.padding,
+    paddingBottom: SIZES.padding * 2,
+  },
+  categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: SIZES.padding,
-    gap: SIZES.padding,
+    justifyContent: 'space-between',
   },
   categoryCard: {
-    width: '47%',
-    aspectRatio: 1,
-    backgroundColor: COLORS.primary,
+    width: cardWidth,
+    marginBottom: SIZES.padding,
+    backgroundColor: COLORS.white,
     borderRadius: SIZES.radius,
-    padding: SIZES.padding,
-    alignItems: 'center',
-    justifyContent: 'center',
     ...SHADOWS.medium,
   },
-  fullWidthCard: {
+  categoryImage: {
     width: '100%',
-    aspectRatio: 3,
-  },
-  categoryText: {
-    color: COLORS.white,
-    fontSize: SIZES.font,
-    fontFamily: FONTS.medium,
-    marginTop: SIZES.base,
-    textAlign: 'center',
-  },
-  searchResultsContainer: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-  searchResultsList: {
-    padding: SIZES.padding,
-  },
-  searchResultItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: SIZES.padding,
-    backgroundColor: COLORS.white,
+    height: cardWidth,
     borderRadius: SIZES.radius,
+  },
+  categoryName: {
+    fontSize: SIZES.font,
+    fontWeight: '600',
+    color: COLORS.primary,
+    textAlign: 'center',
+    marginTop: SIZES.base,
     marginBottom: SIZES.base,
-    ...SHADOWS.light,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: SIZES.font,
-    fontFamily: FONTS.medium,
-    color: COLORS.black,
-  },
-  storeName: {
-    fontSize: SIZES.small,
-    fontFamily: FONTS.regular,
-    color: COLORS.gray,
-    marginTop: SIZES.base / 2,
-  },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  price: {
-    fontSize: SIZES.font,
-    fontFamily: FONTS.medium,
-    color: COLORS.black,
-  },
-  lowestPrice: {
-    color: COLORS.success,
-  },
-  highestPrice: {
-    color: COLORS.error,
-  },
-  organicBadge: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SIZES.base,
-    paddingVertical: SIZES.base / 2,
-    borderRadius: SIZES.radius / 2,
-    marginTop: SIZES.base / 2,
-  },
-  organicText: {
-    color: COLORS.white,
-    fontSize: SIZES.small,
-    fontFamily: FONTS.regular,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  noResultsContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SIZES.padding,
-  },
-  noResultsText: {
-    fontSize: SIZES.font,
-    fontFamily: FONTS.medium,
-    color: COLORS.gray,
   },
 }); 

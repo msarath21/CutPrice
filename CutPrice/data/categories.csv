@@ -1,0 +1,11 @@
+category_id,category_name,parent_category
+C001,Dairy,Grocery
+C002,Produce,Fresh
+C003,Meat,Fresh
+C004,Bakery,Fresh
+C005,Grains,Grocery
+C006,Beverages,Grocery
+C007,Snacks,Grocery
+C008,Breakfast,Grocery
+C009,Household,Non-Food
+C010,Baking,Grocery 

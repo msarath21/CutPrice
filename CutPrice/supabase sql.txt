@@ -1,0 +1,200 @@
+-- Drop functions if they exist
+DROP FUNCTION IF EXISTS import_products_from_csv();
+DROP FUNCTION IF EXISTS import_stores_from_csv();
+
+-- Drop tables if they exist
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS stores;
+
+CREATE EXTENSION IF NOT EXISTS "postgis";
+CREATE EXTENSION IF NOT EXISTS "http";
+
+-------------
+
+CREATE TABLE IF NOT EXISTS stores (
+    id SERIAL PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    address TEXT NOT NULL,
+    location GEOMETRY(Point, 4326) NOT NULL,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    price NUMERIC(10,2) NOT NULL,
+    rating NUMERIC(3,1) CHECK (rating >= 0 AND rating <= 5),
+    "isOrganic" BOOLEAN NOT NULL DEFAULT false,
+    store TEXT NOT NULL REFERENCES stores(name),
+    category TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(name, store)
+);
+
+----------------------------------
+
+CREATE OR REPLACE FUNCTION import_products_from_csv()
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  csv_data text;
+  row_count int := 0;
+BEGIN
+  -- Read CSV file from URL
+  SELECT content::text INTO csv_data 
+  FROM http_get('https://hlrjjkbtkbzzklxhsduj.supabase.co/storage/v1/object/public/import-data//products.csv');
+
+  -- Create temporary table to hold CSV data
+  DROP TABLE IF EXISTS temp_products;
+  CREATE TEMP TABLE temp_products (
+    name text,
+    price numeric,
+    rating numeric,
+    is_organic boolean,
+    store text,
+    category text,
+    unit text
+  );
+
+  -- Insert data from CSV into temp table, skipping the header row
+  INSERT INTO temp_products
+  SELECT 
+    (string_to_array(line, ','))[1]::text as name,
+    (string_to_array(line, ','))[2]::numeric as price,
+    (string_to_array(line, ','))[3]::numeric as rating,
+    (string_to_array(line, ','))[4]::boolean as is_organic,
+    (string_to_array(line, ','))[5]::text as store,
+    (string_to_array(line, ','))[6]::text as category,
+    (string_to_array(line, ','))[7]::text as unit
+  FROM regexp_split_to_table(csv_data, E'\n') as line
+  WHERE line != '' -- Skip empty lines
+  AND line NOT LIKE 'name,price%'; -- Skip header row
+
+  -- Insert data from temp table into products table
+  INSERT INTO products (name, price, rating, "isOrganic", store, category, unit)
+  SELECT 
+    t.name,
+    t.price,
+    t.rating,
+    t.is_organic,
+    t.store,
+    t.category,
+    t.unit
+  FROM temp_products t
+  ON CONFLICT (name, store) DO UPDATE
+  SET 
+    price = EXCLUDED.price,
+    rating = EXCLUDED.rating,
+    "isOrganic" = EXCLUDED."isOrganic",
+    category = EXCLUDED.category,
+    unit = EXCLUDED.unit;
+
+  GET DIAGNOSTICS row_count = ROW_COUNT;
+
+  -- Clean up
+  DROP TABLE IF EXISTS temp_products;
+
+  RETURN 'Successfully imported ' || row_count || ' products';
+END;
+$$;
+
+-----------------------
+CREATE OR REPLACE FUNCTION import_stores_from_csv()
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  csv_data text;
+  row_count int := 0;
+BEGIN
+  -- Read CSV file from URL
+  SELECT content::text INTO csv_data 
+  FROM http_get('https://hlrjjkbtkbzzklxhsduj.supabase.co/storage/v1/object/public/import-data//stores.csv');
+
+  -- Create temporary table to hold CSV data
+  DROP TABLE IF EXISTS temp_stores;
+  CREATE TEMP TABLE temp_stores (
+    name text,
+    address text,
+    latitude float8,
+    longitude float8,
+    is_active boolean
+  );
+
+  -- Insert data from CSV into temp table, skipping the header row
+  INSERT INTO temp_stores
+  SELECT 
+    (string_to_array(line, ','))[1]::text as name,
+    (string_to_array(line, ','))[2]::text as address,
+    (string_to_array(line, ','))[3]::float8 as latitude,
+    (string_to_array(line, ','))[4]::float8 as longitude,
+    (string_to_array(line, ','))[5]::boolean as is_active
+  FROM regexp_split_to_table(csv_data, E'\n') as line
+  WHERE line != '' -- Skip empty lines
+  AND line NOT LIKE 'name,address%'; -- Skip header row
+
+  -- Insert data from temp table into stores table
+  INSERT INTO stores (name, address, location, "isActive")
+  SELECT 
+    t.name,
+    t.address,
+    ST_SetSRID(ST_MakePoint(t.longitude, t.latitude), 4326),
+    t.is_active
+  FROM temp_stores t
+  ON CONFLICT (name) DO UPDATE
+  SET 
+    address = EXCLUDED.address,
+    location = EXCLUDED.location,
+    "isActive" = EXCLUDED."isActive";
+
+  GET DIAGNOSTICS row_count = ROW_COUNT;
+
+  -- Clean up
+  DROP TABLE IF EXISTS temp_stores;
+
+  RETURN 'Successfully imported ' || row_count || ' stores';
+END;
+$$;
+----------------------
+SELECT import_stores_from_csv();
+SELECT import_products_from_csv();
+---------------------------------
+
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_schema = 'storage' 
+AND table_name = 'objects';
+
+-------------------------
+-- Check stores data
+SELECT name, address, ST_AsText(location) as location, "isActive" 
+FROM stores 
+ORDER BY name;
+
+-- Check products data
+SELECT name, price, rating, "isOrganic", store, category, unit 
+FROM products 
+ORDER BY category, name;
+
+-- Get some basic statistics
+SELECT 
+    COUNT(*) as total_stores,
+    COUNT(*) FILTER (WHERE "isActive" = true) as active_stores
+FROM stores;
+
+SELECT 
+    category,
+    COUNT(*) as product_count,
+    AVG(price)::numeric(10,2) as avg_price,
+    AVG(rating)::numeric(3,1) as avg_rating
+FROM products
+GROUP BY category
+ORDER BY category;
+-----------------
