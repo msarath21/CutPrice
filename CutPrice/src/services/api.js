@@ -154,14 +154,28 @@ export const productService = {
   },
 
   // Search products
-  searchProducts: async (query, store = '') => {
+  searchProducts: async (query, store = '', isFoodSearch = false) => {
     try {
       let queryBuilder = supabase
         .from('products')
         .select('*');
 
       if (query) {
-        queryBuilder = queryBuilder.ilike('name', `%${query}%`);
+        // Build the search conditions
+        const searchConditions = [
+          `name.ilike.%${query}%`,
+          `category.ilike.%${query}%`
+        ];
+
+        // If it's a food search, add category-based filtering
+        if (isFoodSearch) {
+          searchConditions.push(
+            "category.in.(Dairy,Produce,Meat,Bakery,Grains,Beverages,Snacks,Breakfast,Baking)"
+          );
+        }
+
+        // Combine conditions with OR
+        queryBuilder = queryBuilder.or(searchConditions.join(','));
       }
 
       if (store) {

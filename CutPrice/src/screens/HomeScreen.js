@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -18,19 +18,27 @@ const { width } = Dimensions.get('window');
 const cardWidth = (width - (SIZES.padding * 3)) / 2;
 
 const categories = [
-  { id: 'C001', name: 'Dairy', image: require('../../assets/catogery/diary.png') },
-  { id: 'C002', name: 'Produce', image: require('../../assets/catogery/produce.png') },
-  { id: 'C003', name: 'Meat', image: require('../../assets/catogery/meat.png') },
-  { id: 'C004', name: 'Bakery', image: require('../../assets/catogery/bakery.png') },
-  { id: 'C005', name: 'Grains', image: require('../../assets/catogery/grains.png') },
-  { id: 'C006', name: 'Beverages', image: require('../../assets/catogery/bevarages.png') },
-  { id: 'C007', name: 'Snacks', image: require('../../assets/catogery/snacks.png') },
-  { id: 'C008', name: 'Breakfast', image: require('../../assets/catogery/breakfast.png') },
-  { id: 'C009', name: 'Household', image: require('../../assets/catogery/household.png') },
-  { id: 'C010', name: 'Baking', image: require('../../assets/catogery/backing.png') },
+  { id: 'C001', name: 'Dairy', image: require('../../assets/catogery/diary.png'), keywords: ['milk', 'cheese', 'yogurt', 'food'] },
+  { id: 'C002', name: 'Produce', image: require('../../assets/catogery/produce.png'), keywords: ['vegetables', 'fruits', 'fresh', 'food'] },
+  { id: 'C003', name: 'Meat', image: require('../../assets/catogery/meat.png'), keywords: ['chicken', 'beef', 'pork', 'food'] },
+  { id: 'C004', name: 'Bakery', image: require('../../assets/catogery/bakery.png'), keywords: ['bread', 'cake', 'pastries', 'food'] },
+  { id: 'C005', name: 'Grains', image: require('../../assets/catogery/grains.png'), keywords: ['rice', 'pasta', 'cereal', 'food'] },
+  { id: 'C006', name: 'Beverages', image: require('../../assets/catogery/bevarages.png'), keywords: ['drinks', 'soda', 'juice', 'water'] },
+  { id: 'C007', name: 'Snacks', image: require('../../assets/catogery/snacks.png'), keywords: ['chips', 'cookies', 'candy', 'food'] },
+  { id: 'C008', name: 'Breakfast', image: require('../../assets/catogery/breakfast.png'), keywords: ['cereal', 'eggs', 'coffee', 'food'] },
+  { id: 'C009', name: 'Household', image: require('../../assets/catogery/household.png'), keywords: ['cleaning', 'supplies', 'home'] },
+  { id: 'C010', name: 'Baking', image: require('../../assets/catogery/backing.png'), keywords: ['flour', 'sugar', 'ingredients', 'food'] },
 ];
 
 export default function HomeScreen({ navigation }) {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredCategories = categories.filter(category => {
+    const searchLower = searchTerm.toLowerCase();
+    return category.name.toLowerCase().includes(searchLower) || 
+           category.keywords.some(keyword => keyword.toLowerCase().includes(searchLower));
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor={COLORS.white} barStyle="dark-content" />
@@ -73,8 +81,10 @@ export default function HomeScreen({ navigation }) {
         <Ionicons name="search" size={20} color={COLORS.gray} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search products..."
+          placeholder="Search categories..."
           placeholderTextColor={COLORS.gray}
+          value={searchTerm}
+          onChangeText={setSearchTerm}
         />
       </View>
 
@@ -84,7 +94,7 @@ export default function HomeScreen({ navigation }) {
         contentContainerStyle={styles.scrollContent}
       >
         <View style={styles.categoriesGrid}>
-          {categories.map((category) => (
+          {filteredCategories.map((category) => (
             <TouchableOpacity
               key={category.id}
               style={styles.categoryCard}

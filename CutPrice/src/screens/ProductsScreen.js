@@ -43,11 +43,19 @@ function PriceComparisonModal({ visible, onClose, productName, prices }) {
           <View style={styles.priceList}>
             {prices.map((item, index) => (
               <View key={index} style={styles.priceItem}>
-                <Text style={styles.storeName}>{item.store}</Text>
+                <View style={styles.storeContainer}>
+                  <Ionicons 
+                    name="storefront-outline" 
+                    size={16} 
+                    color={COLORS.gray} 
+                    style={styles.storeIcon}
+                  />
+                  <Text style={styles.storeName}>{item.store}</Text>
+                </View>
                 <Text style={[
                   styles.priceText,
-                  item.isLowest && styles.lowestPrice,
-                  item.isHighest && styles.highestPrice
+                  index === 0 && styles.lowestPrice,
+                  index === prices.length - 1 && styles.highestPrice
                 ]}>
                   ${Number(item.price).toFixed(2)}
                 </Text>
@@ -65,11 +73,22 @@ function ProductsScreen({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const { storeName, category, categoryId } = route.params || {};
+  const { storeName, category, categoryId, productName, allPrices } = route.params || {};
 
   useEffect(() => {
-    loadProducts();
-  }, [storeName, category]);
+    if (productName && allPrices) {
+      // Coming from search - show price comparison directly
+      const sortedPrices = [...allPrices].sort((a, b) => a.price - b.price);
+      setSelectedProduct({
+        name: productName,
+        prices: sortedPrices
+      });
+      setModalVisible(true);
+      setLoading(false);
+    } else {
+      loadProducts();
+    }
+  }, [storeName, category, productName, allPrices]);
 
   const loadProducts = async () => {
     try {
@@ -123,11 +142,8 @@ function ProductsScreen({ route, navigation }) {
   };
 
   const handleProductPress = (product) => {
-    const sortedPrices = product.prices.map(price => ({
-      ...price,
-      isLowest: price.price === product.lowestPrice,
-      isHighest: price.price === product.highestPrice
-    })).sort((a, b) => a.price - b.price);
+    const sortedPrices = product.prices
+      .sort((a, b) => a.price - b.price);
 
     setSelectedProduct({
       name: product.name,
@@ -171,15 +187,17 @@ function ProductsScreen({ route, navigation }) {
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>
-          {category ? `${category}` : storeName ? `${storeName} Products` : 'All Products'}
-        </Text>
+        {!productName && (
+          <Text style={styles.title}>
+            {category ? `${category}` : storeName ? `${storeName} Products` : 'All Products'}
+          </Text>
+        )}
 
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
-        ) : (
+        ) : !productName ? (
           <FlatList
             data={products}
             renderItem={renderProduct}
@@ -192,12 +210,17 @@ function ProductsScreen({ route, navigation }) {
               </View>
             )}
           />
-        )}
+        ) : null}
       </View>
 
       <PriceComparisonModal
         visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+        onClose={() => {
+          setModalVisible(false);
+          if (productName) {
+            navigation.goBack();
+          }
+        }}
         productName={selectedProduct?.name}
         prices={selectedProduct?.prices || []}
       />
@@ -210,63 +233,49 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  statusBarBackground: {
-    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
-    backgroundColor: COLORS.primary,
-  },
-  safeArea: {
-    flex: 1,
-  },
   headerContainer: {
     backgroundColor: COLORS.white,
-    ...SHADOWS.light,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.black,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   headerSafeArea: {
-    backgroundColor: COLORS.white,
+    paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SIZES.padding,
-    paddingTop: SIZES.padding * 1.5,
-    paddingBottom: SIZES.padding,
-    backgroundColor: COLORS.white,
-  },
-  headerButton: {
-    padding: SIZES.base,
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.radius,
-    ...SHADOWS.light,
-  },
-  headerTitle: {
-    fontSize: SIZES.large,
-    fontFamily: FONTS.medium,
-    color: COLORS.black,
+    paddingVertical: SIZES.padding / 2,
   },
   logo: {
+    width: 100,
     height: 40,
-    width: 120,
   },
   headerRight: {
-    width: 24, // To balance the back button
+    width: 24,
   },
   content: {
     flex: 1,
     padding: SIZES.padding,
   },
   title: {
-    fontSize: SIZES.fontSize.title,
-    fontWeight: 'bold',
+    fontSize: SIZES.h2,
+    fontWeight: '600',
     color: COLORS.primary,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginBottom: SIZES.padding,
   },
   productsList: {
-    padding: SIZES.padding,
+    paddingBottom: SIZES.padding * 2,
   },
   productCard: {
     backgroundColor: COLORS.white,
@@ -276,34 +285,27 @@ const styles = StyleSheet.create({
     ...SHADOWS.medium,
   },
   productInfo: {
-    gap: SIZES.base,
+    flex: 1,
   },
   productName: {
-    fontSize: SIZES.fontSize.subtitle,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.black,
+    marginBottom: 4,
   },
   productUnit: {
-    fontSize: SIZES.fontSize.body,
+    fontSize: 12,
     color: COLORS.gray,
+    marginBottom: 8,
   },
   priceRange: {
-    fontSize: SIZES.fontSize.subtitle,
+    fontSize: 14,
     color: COLORS.primary,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginBottom: 4,
   },
   storeCount: {
-    fontSize: SIZES.fontSize.body,
-    color: COLORS.gray,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SIZES.padding * 2,
-  },
-  emptyStateText: {
-    fontSize: SIZES.fontSize.body,
+    fontSize: 12,
     color: COLORS.gray,
   },
   modalOverlay: {
@@ -316,7 +318,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: SIZES.radius * 2,
     borderTopRightRadius: SIZES.radius * 2,
     padding: SIZES.padding,
-    minHeight: '50%',
+    maxHeight: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -325,35 +327,60 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.padding,
   },
   modalTitle: {
-    fontSize: SIZES.fontSize.title,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: COLORS.primary,
   },
   priceList: {
-    gap: SIZES.padding,
+    paddingBottom: SIZES.padding,
   },
   priceItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: SIZES.padding / 2,
+    paddingVertical: SIZES.base,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
+  storeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  storeIcon: {
+    marginRight: 8,
+  },
   storeName: {
-    fontSize: SIZES.fontSize.subtitle,
+    fontSize: 14,
     color: COLORS.black,
+    flex: 1,
   },
   priceText: {
-    fontSize: SIZES.fontSize.subtitle,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.black,
   },
   lowestPrice: {
-    color: COLORS.success,
+    color: COLORS.success || '#28a745',
   },
   highestPrice: {
-    color: COLORS.error,
+    color: COLORS.error || '#dc3545',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SIZES.padding * 2,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: COLORS.gray,
+    textAlign: 'center',
   },
 });
 

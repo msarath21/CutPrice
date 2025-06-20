@@ -43,27 +43,29 @@ const SearchScreen = ({ navigation }) => {
       style={styles.resultItem}
       onPress={() => navigation.navigate('Products', { 
         productId: item.id,
-        productName: item.name
+        productName: item.name,
+        allPrices: item.allPrices
       })}
     >
       <View style={styles.resultContent}>
-        <Text style={styles.resultName}>{item.name}</Text>
-        <View style={styles.priceContainer}>
-          <Text style={[
-            styles.priceText,
-            item.priceType === 'lowest' && styles.lowestPrice,
-            item.priceType === 'highest' && styles.highestPrice
-          ]}>
-            ${Number(item.price).toFixed(2)}
-          </Text>
+        <View style={styles.nameContainer}>
+          <Text style={styles.resultName}>{item.name}</Text>
+          <View style={styles.storeInfoContainer}>
+            <Ionicons name="storefront-outline" size={14} color={COLORS.gray} />
+            <Text style={styles.storeCount}>
+              Available in {item.allPrices.length} store{item.allPrices.length > 1 ? 's' : ''}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.rightContainer}>
           {item.is_organic && (
             <View style={styles.organicBadge}>
               <Text style={styles.organicText}>Organic</Text>
             </View>
           )}
+          <Ionicons name="chevron-forward" size={20} color={COLORS.gray} />
         </View>
       </View>
-      <Text style={styles.storeText}>{item.store}</Text>
     </TouchableOpacity>
   );
 
@@ -74,7 +76,7 @@ const SearchScreen = ({ navigation }) => {
           <Ionicons name="search" size={20} color={COLORS.gray} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search products..."
+            placeholder="Search for food, products, or categories..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholderTextColor={COLORS.gray}
@@ -93,20 +95,36 @@ const SearchScreen = ({ navigation }) => {
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : searchResults.length > 0 ? (
-        <FlatList
-          data={searchResults}
-          renderItem={renderSearchResult}
-          keyExtractor={item => item.id.toString()}
-          contentContainerStyle={styles.resultsList}
-          showsVerticalScrollIndicator={false}
-        />
+        <>
+          <View style={styles.resultHeader}>
+            <Text style={styles.resultCount}>
+              Found {searchResults.length} items
+            </Text>
+            <Text style={styles.resultHint}>
+              Tap an item to see prices from all stores
+            </Text>
+          </View>
+          <FlatList
+            data={searchResults}
+            renderItem={renderSearchResult}
+            keyExtractor={item => item.id.toString()}
+            contentContainerStyle={styles.resultsList}
+            showsVerticalScrollIndicator={false}
+          />
+        </>
       ) : searchQuery.length > 0 ? (
         <View style={styles.noResultsContainer}>
           <Text style={styles.noResultsText}>No products found</Text>
+          <Text style={styles.noResultsSubText}>
+            Try searching for food categories like "dairy", "meat", or "snacks"
+          </Text>
         </View>
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Search for products</Text>
+          <Text style={styles.emptyText}>Search for food items or any products</Text>
+          <Text style={styles.emptySubText}>
+            Try typing "food" to see all food categories
+          </Text>
         </View>
       )}
     </SafeAreaView>
@@ -150,41 +168,55 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  resultName: {
-    fontSize: 14,
-    color: COLORS.black,
+  nameContainer: {
     flex: 1,
+    marginRight: SIZES.padding,
   },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  priceText: {
-    fontSize: 14,
-    fontWeight: '600',
+  resultName: {
+    fontSize: 16,
     color: COLORS.black,
+    marginBottom: 4,
   },
-  lowestPrice: {
-    color: COLORS.success || '#28a745',
+  storeInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  highestPrice: {
-    color: COLORS.error || '#dc3545',
-  },
-  storeText: {
+  storeCount: {
     fontSize: 12,
     color: COLORS.gray,
-    marginTop: 4,
+    marginLeft: 4,
+  },
+  rightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   organicBadge: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    marginTop: 4,
+    marginRight: SIZES.base,
   },
   organicText: {
     color: COLORS.white,
     fontSize: 10,
     fontWeight: '500',
+  },
+  resultHeader: {
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: SIZES.base,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
+  },
+  resultCount: {
+    fontSize: 14,
+    color: COLORS.gray,
+  },
+  resultHint: {
+    fontSize: 12,
+    color: COLORS.gray,
+    marginTop: 2,
+    fontStyle: 'italic',
   },
   loadingContainer: {
     flex: 1,
@@ -198,7 +230,14 @@ const styles = StyleSheet.create({
   },
   noResultsText: {
     fontSize: 16,
+    color: COLORS.black,
+    marginBottom: SIZES.base,
+  },
+  noResultsSubText: {
+    fontSize: 14,
     color: COLORS.gray,
+    textAlign: 'center',
+    marginTop: SIZES.base,
   },
   emptyContainer: {
     flex: 1,
@@ -207,7 +246,14 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    color: COLORS.black,
+    marginBottom: SIZES.base,
+  },
+  emptySubText: {
+    fontSize: 14,
     color: COLORS.gray,
+    textAlign: 'center',
+    marginTop: SIZES.base,
   },
 });
 
