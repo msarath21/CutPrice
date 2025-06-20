@@ -1,46 +1,114 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  SafeAreaView, 
+  Platform, 
+  ActivityIndicator,
+  FlatList,
+  ScrollView,
+  Dimensions,
+  StatusBar as RNStatusBar,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../constants/theme';
-import StatusBar from '../components/StatusBar';
+import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
+import CustomStatusBar from '../components/StatusBar';
 import { withBrownStatusBar } from '../utils/screenUtils';
+import { storeService } from '../services/storeService';
+import { fetchStores } from '../services/api';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const TAB_WIDTH = SCREEN_WIDTH / 3; // Divide screen into 3 equal parts for tabs
+
+// Import the header image
+const headerLogo = require('../../assets/header.png');
 
 // Fallback data in case API fails
 const fallbackStores = [
-  { _id: 1, name: 'Walmart Supercenter', address: '123 Main St, City, State' },
-  { _id: 2, name: 'Costco Wholesale', address: '456 Market St, City, State' },
-  { _id: 3, name: 'India Cash & Carry', address: '789 Commerce St, City, State' },
+  { id: 1, name: 'Walmart Supercenter', address: '123 Main St, City, State' },
+  { id: 2, name: 'Costco Wholesale', address: '456 Market St, City, State' },
+  { id: 3, name: 'India Cash & Carry', address: '789 Commerce St, City, State' },
 ];
 
 function StoresScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState('Nearby');
+  const [activeTab, setActiveTab] = useState('all');
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchStores();
+    loadStores();
   }, []);
 
-  const fetchStores = async () => {
+  const loadStores = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://10.0.0.169:3000/api/stores');
-      if (!response.ok) {
-        throw new Error('Failed to fetch stores');
+      let data;
+      if (activeTab === 'all') {
+        data = await storeService.getAllStores();
+      } else if (activeTab === 'nearby') {
+        data = await storeService.getNearbyStores();
+      } else {
+        data = await storeService.getFavoriteStores();
       }
       
-      const data = await response.json();
       setStores(data);
     } catch (err) {
-      console.error('Error fetching stores:', err);
+      console.error('Error loading stores:', err);
       setError('Failed to load stores');
-      setStores(fallbackStores);
     } finally {
       setLoading(false);
     }
+  };
+
+  const renderStore = useCallback(({ item }) => (
+    <TouchableOpacity
+      style={styles.storeCard}
+      onPress={() => navigation.navigate('StoreDetails', { store: item })}
+    >
+      <View style={styles.storeInfo}>
+        <MaterialIcons name="store" size={24} color={COLORS.primary} />
+        <View style={styles.storeTextContainer}>
+          <Text style={styles.storeName}>{item.name}</Text>
+          <Text style={styles.storeAddress}>{item.address}</Text>
+          {item.distance && (
+            <Text style={styles.storeDistance}>{item.distance.toFixed(1)} km</Text>
+          )}
+        </View>
+        <MaterialIcons name="chevron-right" size={24} color={COLORS.gray} />
+      </View>
+    </TouchableOpacity>
+  ), [navigation]);
+
+  const renderTabs = () => {
+    const tabs = ['all', 'nearby', 'favorites'];
+    return (
+      <View style={styles.tabContainer}>
+        {tabs.map((tabName) => (
+          <TouchableOpacity
+            key={tabName}
+            style={[
+              styles.tab,
+              activeTab === tabName && styles.activeTab
+            ]}
+            onPress={() => setActiveTab(tabName)}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                { color: activeTab === tabName ? COLORS.primary : COLORS.gray }
+              ]}
+            >
+              {tabName.charAt(0).toUpperCase() + tabName.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
   };
 
   if (loading) {
@@ -53,52 +121,40 @@ function StoresScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar />
+      <CustomStatusBar />
+      <View style={styles.statusBarBackground} />
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <MaterialIcons name="arrow-back" size={24} color={COLORS.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Stores</Text>
-        </View>
-
-        <View style={styles.tabContainer}>
-          {['Nearby', 'Previous', 'Favorites'].map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.activeTab]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {error && (
-          <Text style={styles.errorText}>{error}</Text>
-        )}
-
-        <View style={styles.storeList}>
-          {stores.map(store => (
+        <View style={styles.headerContainer}>
+          <View style={styles.header}>
             <TouchableOpacity 
-              key={store._id}
-              style={styles.storeCard}
-              onPress={() => navigation.navigate('StoreDetails', { store })}
+              style={styles.headerButton}
+              onPress={() => navigation.goBack()}
             >
-              <MaterialIcons name="store" size={24} color={COLORS.primary} />
-              <View style={styles.storeInfo}>
-                <Text style={styles.storeName}>{store.name}</Text>
-                <Text style={styles.storeAddress}>{store.address}</Text>
-              </View>
-              <MaterialIcons name="chevron-right" size={24} color={COLORS.gray} />
+              <MaterialIcons name="arrow-back" size={24} color={COLORS.primary} />
             </TouchableOpacity>
-          ))}
+            <Text style={styles.headerTitle}>Stores</Text>
+            <View style={styles.headerButton} />
+          </View>
         </View>
+
+        {renderTabs()}
+
+        {error ? (
+          <Text style={styles.errorText}>{error}</Text>
+        ) : (
+          <FlatList
+            data={stores}
+            renderItem={renderStore}
+            keyExtractor={(item) => (item._id || item.id || Math.random().toString()).toString()}
+            contentContainerStyle={styles.storeList}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No stores found</Text>
+              </View>
+            )}
+          />
+        )}
       </SafeAreaView>
     </View>
   );
@@ -109,92 +165,113 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  statusBarBackground: {
+    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
+    backgroundColor: COLORS.primary,
   },
   safeArea: {
     flex: 1,
   },
+  headerContainer: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SIZES.padding,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingTop: SIZES.padding * 1.5,
+    paddingBottom: SIZES.padding,
+    backgroundColor: COLORS.white,
   },
-  backButton: {
+  headerButton: {
     padding: SIZES.base,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    ...SHADOWS.light,
   },
   headerTitle: {
-    fontSize: SIZES.fontSize.title,
-    fontWeight: '600',
+    fontSize: SIZES.large,
+    fontFamily: FONTS.medium,
     color: COLORS.black,
-    marginLeft: SIZES.padding,
   },
   tabContainer: {
     flexDirection: 'row',
-    paddingHorizontal: SIZES.padding,
+    backgroundColor: COLORS.white,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.lightGray,
   },
   tab: {
     paddingVertical: SIZES.padding,
-    marginRight: SIZES.padding * 2,
+    paddingHorizontal: SIZES.large,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   activeTab: {
-    borderBottomWidth: 2,
     borderBottomColor: COLORS.primary,
   },
   tabText: {
-    fontSize: SIZES.fontSize.subtitle,
-    color: COLORS.gray,
-  },
-  activeTabText: {
-    color: COLORS.primary,
-    fontWeight: '600',
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
   },
   storeList: {
     padding: SIZES.padding,
   },
   storeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SIZES.padding,
     backgroundColor: COLORS.white,
     borderRadius: SIZES.radius,
     marginBottom: SIZES.padding,
-    ...Platform.select({
-      ios: {
-        shadowColor: COLORS.gray,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    ...SHADOWS.light,
   },
   storeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SIZES.padding,
+  },
+  storeTextContainer: {
     flex: 1,
-    marginLeft: SIZES.padding,
+    marginHorizontal: SIZES.padding,
   },
   storeName: {
-    fontSize: SIZES.fontSize.subtitle,
-    fontWeight: '500',
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
     color: COLORS.black,
-    marginBottom: 4,
   },
   storeAddress: {
-    fontSize: SIZES.fontSize.body,
+    fontSize: SIZES.small,
     color: COLORS.gray,
+    marginTop: SIZES.base,
+  },
+  storeDistance: {
+    fontSize: SIZES.small,
+    color: COLORS.primary,
+    marginTop: SIZES.base,
   },
   errorText: {
     color: COLORS.error,
     textAlign: 'center',
-    padding: SIZES.padding,
+    marginTop: SIZES.padding,
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: SIZES.padding * 2,
+  },
+  emptyStateText: {
+    fontSize: SIZES.font,
+    color: COLORS.gray,
+    fontFamily: FONTS.regular,
   },
 });
 
-export default withBrownStatusBar(StoresScreen); 
+export default StoresScreen; 

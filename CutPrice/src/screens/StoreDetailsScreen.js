@@ -11,8 +11,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SIZES, SHADOWS, FONTS } from '../constants/theme';
 import StatusBar from '../components/StatusBar';
+import { productService } from '../services/api';
 
 const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
 
@@ -29,26 +30,22 @@ const categories = [
 const categorizeItems = (items) => {
   return {
     'Fruits & Vegetables': items.filter(item => 
-      item.name.toLowerCase().includes('apple') || 
-      item.name.toLowerCase().includes('banana')
+      item.category === 'Fruits & Vegetables'
     ),
     'Dairy & Eggs': items.filter(item => 
-      item.name.toLowerCase().includes('milk')
+      item.category === 'Dairy & Eggs'
     ),
     'Bread & Bakery': items.filter(item => 
-      item.name.toLowerCase().includes('bread')
+      item.category === 'Bread & Bakery'
     ),
     'Meat & Poultry': items.filter(item => 
-      item.name.toLowerCase().includes('chicken') || 
-      item.name.toLowerCase().includes('beef')
+      item.category === 'Meat & Poultry'
     ),
     'Household': items.filter(item => 
-      item.name.toLowerCase().includes('toilet') || 
-      item.name.toLowerCase().includes('detergent')
+      item.category === 'Household'
     ),
     'Pantry': items.filter(item => 
-      item.name.toLowerCase().includes('tomato') || 
-      item.name.toLowerCase().includes('pasta')
+      item.category === 'Pantry'
     ),
   };
 };
@@ -70,12 +67,7 @@ function StoreDetailsScreen({ route, navigation }) {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`http://10.0.0.169:3000/api/products/store/${encodeURIComponent(store.name)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch store products');
-      }
-
-      const data = await response.json();
+      const data = await productService.getProductsByStore(store.name);
       setProducts(data);
       setCategorizedItems(categorizeItems(data));
     } catch (err) {
@@ -98,74 +90,89 @@ function StoreDetailsScreen({ route, navigation }) {
     <View style={styles.container}>
       <StatusBar />
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <MaterialIcons name="arrow-back" size={24} color={COLORS.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{store.name}</Text>
-        </View>
-
-        <View style={styles.addressContainer}>
-          <MaterialIcons name="location-on" size={20} color={COLORS.gray} />
-          <Text style={styles.addressText}>{store.address}</Text>
-        </View>
-
-        <View style={styles.categoriesContainer}>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={categories}
-            keyExtractor={(item) => item}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[
-                  styles.categoryButton,
-                  selectedCategory === item && styles.selectedCategory,
-                ]}
-                onPress={() => setSelectedCategory(item)}
-              >
-                <Text
-                  style={[
-                    styles.categoryText,
-                    selectedCategory === item && styles.selectedCategoryText,
-                  ]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-
-        {error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
+        <View style={styles.headerContainer}>
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => navigation.goBack()}
+            >
+              <MaterialIcons name="arrow-back" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{store.name}</Text>
           </View>
-        ) : (
-          <FlatList
-            style={styles.productList}
-            data={categorizedItems[selectedCategory] || []}
-            keyExtractor={(item) => item._id}
-            renderItem={({ item }) => (
-              <View style={styles.productCard}>
-                <View style={styles.productInfo}>
-                  <Text style={styles.productName}>{item.name}</Text>
-                  <Text style={styles.productUnit}>{item.unit}</Text>
-                </View>
-                <View style={styles.priceContainer}>
-                  <Text style={styles.price}>${item.price.toFixed(2)}</Text>
-                  <View style={styles.ratingContainer}>
-                    <MaterialIcons name="star" size={16} color={COLORS.primary} />
-                    <Text style={styles.rating}>{item.rating.toFixed(1)}</Text>
+        </View>
+
+        <View style={styles.content}>
+          <View style={styles.storeInfo}>
+            <Text style={styles.storeName}>{store.name}</Text>
+            <Text style={styles.storeAddress}>{store.address}</Text>
+          </View>
+
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{products.length}</Text>
+              <Text style={styles.statLabel}>Products</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{categories.length}</Text>
+              <Text style={styles.statLabel}>Categories</Text>
+            </View>
+          </View>
+
+          <View style={styles.categoriesContainer}>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={categories}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.categoryButton,
+                    selectedCategory === item && styles.selectedCategory,
+                  ]}
+                  onPress={() => setSelectedCategory(item)}
+                >
+                  <Text
+                    style={[
+                      styles.categoryText,
+                      selectedCategory === item && styles.selectedCategoryText,
+                    ]}
+                  >
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : (
+            <FlatList
+              style={styles.productList}
+              data={categorizedItems[selectedCategory] || []}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <View style={styles.productCard}>
+                  <View style={styles.productInfo}>
+                    <Text style={styles.productName}>{item.name}</Text>
+                    <Text style={styles.productUnit}>{item.unit}</Text>
+                  </View>
+                  <View style={styles.priceContainer}>
+                    <Text style={styles.price}>${Number(item.price).toFixed(2)}</Text>
+                    <View style={styles.ratingContainer}>
+                      <MaterialIcons name="star" size={16} color={COLORS.primary} />
+                      <Text style={styles.rating}>{Number(item.rating || 0).toFixed(1)}</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            )}
-          />
-        )}
+              )}
+            />
+          )}
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -176,41 +183,79 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
-  centerContent: {
-    justifyContent: 'center',
-    alignItems: 'center',
+  statusBarBackground: {
+    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
+    backgroundColor: COLORS.primary,
   },
   safeArea: {
     flex: 1,
-    paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0,
+  },
+  headerContainer: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SIZES.padding,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingTop: SIZES.padding * 1.5,
+    paddingBottom: SIZES.padding,
+    backgroundColor: COLORS.white,
   },
-  backButton: {
+  headerButton: {
     padding: SIZES.base,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    ...SHADOWS.light,
   },
   headerTitle: {
-    fontSize: SIZES.fontSize.title,
-    fontWeight: '600',
+    fontSize: SIZES.large,
+    fontFamily: FONTS.medium,
     color: COLORS.black,
-    marginLeft: SIZES.padding,
   },
-  addressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: SIZES.padding,
-    paddingVertical: SIZES.padding / 2,
-    backgroundColor: COLORS.lightGray2,
+  content: {
+    flex: 1,
+    padding: SIZES.padding,
   },
-  addressText: {
-    marginLeft: SIZES.base,
+  storeInfo: {
+    marginBottom: SIZES.padding * 2,
+  },
+  storeName: {
+    fontSize: SIZES.fontSize.title,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
+    marginBottom: SIZES.base,
+  },
+  storeAddress: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontFamily: FONTS.regular,
     color: COLORS.gray,
-    fontSize: SIZES.fontSize.body,
+    marginBottom: SIZES.padding,
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: SIZES.padding * 2,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    padding: SIZES.padding,
+    marginHorizontal: SIZES.base,
+    ...SHADOWS.light,
+  },
+  statValue: {
+    fontSize: SIZES.fontSize.title,
+    fontFamily: FONTS.medium,
+    color: COLORS.primary,
+    marginBottom: SIZES.base,
+  },
+  statLabel: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
   },
   categoriesContainer: {
     paddingVertical: SIZES.padding,
@@ -259,6 +304,7 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     flex: 1,
+    marginRight: SIZES.padding,
   },
   productName: {
     fontSize: SIZES.fontSize.subtitle,

@@ -4,23 +4,21 @@ import {
   Text, 
   StyleSheet, 
   TouchableOpacity, 
-  SafeAreaView, 
+  FlatList,
   TextInput,
+  ActivityIndicator,
   Image,
   Platform,
   StatusBar as RNStatusBar,
-  FlatList,
-  ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
 import CustomStatusBar from '../components/StatusBar';
 import { searchItems } from '../utils/searchUtils';
 
 // Import the header image
 const headerLogo = require('../../assets/header.png');
-
-const STATUSBAR_HEIGHT = Platform.OS === 'android' ? RNStatusBar.currentHeight : 0;
 
 const categories = [
   { id: 1, name: 'Fruits &\nVegetables', icon: 'leaf', type: 'Ionicons', screen: 'Products' },
@@ -62,7 +60,7 @@ export default function HomeScreen({ navigation }) {
   const renderSearchResult = useCallback(({ item }) => (
     <View style={styles.searchResultItem}>
       <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.Item}</Text>
+        <Text style={styles.itemName}>{item.name}</Text>
         <Text style={styles.storeName}>{item.store}</Text>
       </View>
       <View style={styles.priceContainer}>
@@ -73,9 +71,9 @@ export default function HomeScreen({ navigation }) {
             item.priceType === 'highest' && styles.highestPrice,
           ]}
         >
-          ${item.Price}
+          ${Number(item.price).toFixed(2)}
         </Text>
-        {item.Organic === 'Yes' && (
+        {item.is_organic && (
           <View style={styles.organicBadge}>
             <Text style={styles.organicText}>Organic</Text>
           </View>
@@ -85,35 +83,33 @@ export default function HomeScreen({ navigation }) {
   ), []);
 
   const keyExtractor = useCallback((item, index) => 
-    `${item.Item}-${item.store}-${index}`, []);
+    `${item.name}-${item.store}-${index}`, []);
 
   return (
     <View style={styles.container}>
       <CustomStatusBar />
       <View style={styles.statusBarBackground} />
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.content}>
+        <View style={styles.headerContainer}>
           <View style={styles.header}>
-            <Image 
-              source={headerLogo}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <View style={styles.headerRight}>
-              <TouchableOpacity 
-                style={styles.storesButton}
-                onPress={() => navigation.navigate('Stores')}
-              >
-                <MaterialIcons name="location-on" size={20} color={COLORS.primary} />
-                <Text style={styles.storesText}>Stores</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.profileButton}>
-                <MaterialIcons name="person" size={24} color={COLORS.primary} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity 
+              style={styles.headerButton}
+              onPress={() => navigation.navigate('Stores')}
+            >
+              <MaterialIcons name="location-on" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
+            <Image source={headerLogo} style={styles.logo} resizeMode="contain" />
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => alert('Profile feature coming soon!')}
+            >
+              <MaterialIcons name="person" size={24} color={COLORS.primary} />
+            </TouchableOpacity>
           </View>
+        </View>
 
-          <View style={styles.searchContainer}>
+        <View style={styles.searchContainer}>
+          <View style={styles.searchInputContainer}>
             <Ionicons name="search" size={24} color={COLORS.gray} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
@@ -121,12 +117,9 @@ export default function HomeScreen({ navigation }) {
               placeholderTextColor={COLORS.gray}
               value={searchQuery}
               onChangeText={handleSearch}
-              returnKeyType="search"
-              autoCorrect={false}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity 
-                style={styles.clearButton}
                 onPress={() => {
                   setSearchQuery('');
                   setShowResults(false);
@@ -137,52 +130,52 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             )}
           </View>
-
-          {showResults ? (
-            <View style={styles.searchResultsContainer}>
-              {loading ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color={COLORS.primary} />
-                </View>
-              ) : searchResults.length > 0 ? (
-                <FlatList
-                  data={searchResults}
-                  renderItem={renderSearchResult}
-                  keyExtractor={keyExtractor}
-                  contentContainerStyle={styles.searchResultsList}
-                  removeClippedSubviews={true}
-                  maxToRenderPerBatch={10}
-                  windowSize={5}
-                  initialNumToRender={10}
-                />
-              ) : (
-                <View style={styles.noResultsContainer}>
-                  <Text style={styles.noResultsText}>No items found</Text>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={styles.categoriesContainer}>
-              {memoizedCategories.map((category, index) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.categoryCard,
-                    index === categories.length - 1 && styles.fullWidthCard
-                  ]}
-                  onPress={() => navigation.navigate(category.screen, { category: category.name })}
-                >
-                  {category.type === 'Ionicons' ? (
-                    <Ionicons name={category.icon} size={32} color={COLORS.white} />
-                  ) : (
-                    <MaterialIcons name={category.icon} size={32} color={COLORS.white} />
-                  )}
-                  <Text style={styles.categoryText}>{category.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
         </View>
+
+        {showResults ? (
+          <View style={styles.searchResultsContainer}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+              </View>
+            ) : searchResults.length > 0 ? (
+              <FlatList
+                data={searchResults}
+                renderItem={renderSearchResult}
+                keyExtractor={keyExtractor}
+                contentContainerStyle={styles.searchResultsList}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                initialNumToRender={10}
+              />
+            ) : (
+              <View style={styles.noResultsContainer}>
+                <Text style={styles.noResultsText}>No items found</Text>
+              </View>
+            )}
+          </View>
+        ) : (
+          <View style={styles.categoriesContainer}>
+            {memoizedCategories.map((category, index) => (
+              <TouchableOpacity
+                key={category.id}
+                style={[
+                  styles.categoryCard,
+                  index === categories.length - 1 && styles.fullWidthCard
+                ]}
+                onPress={() => navigation.navigate(category.screen, { category: category.name })}
+              >
+                {category.type === 'Ionicons' ? (
+                  <Ionicons name={category.icon} size={32} color={COLORS.white} />
+                ) : (
+                  <MaterialIcons name={category.icon} size={32} color={COLORS.white} />
+                )}
+                <Text style={styles.categoryText}>{category.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -194,96 +187,73 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
   statusBarBackground: {
-    height: STATUSBAR_HEIGHT,
+    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
     backgroundColor: COLORS.primary,
   },
   safeArea: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  headerContainer: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingTop: SIZES.padding * 1.5,
+    paddingBottom: SIZES.padding,
     backgroundColor: COLORS.white,
+  },
+  headerButton: {
+    padding: SIZES.base,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    ...SHADOWS.light,
   },
   logo: {
     height: 40,
     width: 120,
   },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  storesButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F5F5F5',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-  },
-  storesText: {
-    color: COLORS.primary,
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  profileButton: {
-    padding: 4,
-  },
   searchContainer: {
+    paddingHorizontal: SIZES.padding,
+    marginBottom: SIZES.padding,
+  },
+  searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    marginHorizontal: 16,
-    marginVertical: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 24,
+    backgroundColor: COLORS.inputBackground,
+    borderRadius: SIZES.radius,
+    paddingHorizontal: SIZES.padding,
+    height: 48,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: SIZES.base,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    height: 40,
+    fontSize: SIZES.font,
+    fontFamily: FONTS.regular,
     color: COLORS.black,
-  },
-  clearButton: {
-    padding: 4,
   },
   categoriesContainer: {
     flex: 1,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
-    padding: 16,
+    padding: SIZES.padding,
+    gap: SIZES.padding,
   },
   categoryCard: {
     width: '47%',
     aspectRatio: 1,
     backgroundColor: COLORS.primary,
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: SIZES.radius,
+    padding: SIZES.padding,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 4,
-      },
-    }),
+    ...SHADOWS.medium,
   },
   fullWidthCard: {
     width: '100%',
@@ -291,9 +261,9 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     color: COLORS.white,
-    fontSize: 18,
-    fontWeight: '500',
-    marginTop: 12,
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
+    marginTop: SIZES.base,
     textAlign: 'center',
   },
   searchResultsContainer: {
@@ -301,54 +271,57 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
   searchResultsList: {
-    padding: 16,
+    padding: SIZES.padding,
   },
   searchResultItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
+    padding: SIZES.padding,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    marginBottom: SIZES.base,
+    ...SHADOWS.light,
   },
   itemInfo: {
     flex: 1,
-    marginRight: 16,
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
     color: COLORS.black,
-    marginBottom: 4,
   },
   storeName: {
-    fontSize: 14,
+    fontSize: SIZES.small,
+    fontFamily: FONTS.regular,
     color: COLORS.gray,
+    marginTop: SIZES.base / 2,
   },
   priceContainer: {
     alignItems: 'flex-end',
   },
   price: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
     color: COLORS.black,
-    marginBottom: 4,
   },
   lowestPrice: {
-    color: '#2E7D32', // Dark green
+    color: COLORS.success,
   },
   highestPrice: {
-    color: '#C62828', // Dark red
+    color: COLORS.error,
   },
   organicBadge: {
-    backgroundColor: '#E6F4EA',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SIZES.base,
+    paddingVertical: SIZES.base / 2,
+    borderRadius: SIZES.radius / 2,
+    marginTop: SIZES.base / 2,
   },
   organicText: {
-    fontSize: 12,
-    color: '#1E8E3E',
+    color: COLORS.white,
+    fontSize: SIZES.small,
+    fontFamily: FONTS.regular,
   },
   loadingContainer: {
     flex: 1,
@@ -359,10 +332,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 32,
+    padding: SIZES.padding,
   },
   noResultsText: {
-    fontSize: 16,
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
     color: COLORS.gray,
   },
 }); 

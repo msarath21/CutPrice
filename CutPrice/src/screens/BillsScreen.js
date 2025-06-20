@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,34 +12,69 @@ import {
   Image,
   Dimensions,
   StatusBar as RNStatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES, FONTS } from '../constants/theme';
-import StatusBar from '../components/StatusBar';
+import { COLORS, SIZES, FONTS, SHADOWS } from '../constants/theme';
+import CustomStatusBar from '../components/StatusBar';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { withBrownStatusBar } from '../utils/screenUtils';
+import { ref, deleteObject } from 'firebase/storage';
+import { storage } from '../firebase/firebaseConfig';
+import headerLogo from '../../assets/header.png';
+import { searchItems } from '../utils/searchUtils';
 
 const { width } = Dimensions.get('window');
 const COLUMN_COUNT = 2;
-const ITEM_WIDTH = (width - (SIZES.padding * 3)) / COLUMN_COUNT;
-const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
-
-// Import the header image
-const headerLogo = require('../../assets/header.png');
+const CARD_MARGIN = SIZES.base;
+const CARD_WIDTH = (width - (COLUMN_COUNT + 1) * CARD_MARGIN * 2) / COLUMN_COUNT;
+const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 44;
+const HEADER_HEIGHT = 56;
+const TOTAL_HEADER_HEIGHT = STATUSBAR_HEIGHT + HEADER_HEIGHT;
 
 // Create a directory for storing receipts
 const RECEIPTS_DIRECTORY = `${FileSystem.documentDirectory}receipts`;
-const SERVER_URL = 'http://10.0.0.169:3000';
+import { getServerUrl } from '../config/serverConfig';
+const SERVER_URL = getServerUrl();
 
 function BillsScreen({ navigation }) {
-  const [isModalVisible, setIsModalVisible] = useState(false);
   const [receipts, setReceipts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedReceipts, setSelectedReceipts] = useState(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   useEffect(() => {
     setupStorage();
+    loadExistingReceipts();
   }, []);
+
+  const clearError = () => {
+    setError(null);
+  };
+
+  const handleError = (error, context = '') => {
+    console.error(`Error ${context}:`, error);
+    setError(error.message || 'An unexpected error occurred');
+    // Auto-clear error after 5 seconds
+    setTimeout(clearError, 5000);
+  };
+
+  const retryLastAction = async () => {
+    try {
+      setLoading(true);
+      clearError();
+      await loadExistingReceipts();
+    } catch (error) {
+      handleError(error, 'retrying last action');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const setupStorage = async () => {
     try {
@@ -47,131 +82,16 @@ function BillsScreen({ navigation }) {
       if (!dirInfo.exists) {
         await FileSystem.makeDirectoryAsync(RECEIPTS_DIRECTORY, { intermediates: true });
       }
-      loadExistingReceipts();
+      // Create excel directory if it doesn't exist
+      const excelDir = `${FileSystem.documentDirectory}excel`;
+      const excelDirInfo = await FileSystem.getInfoAsync(excelDir);
+      if (!excelDirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(excelDir, { intermediates: true });
+      }
+      await loadExistingReceipts();
     } catch (error) {
       console.error('Error setting up storage:', error);
-    }
-  };
-
-  const loadExistingReceipts = async () => {
-    try {
-      // Load local files
-      const files = await FileSystem.readDirectoryAsync(RECEIPTS_DIRECTORY);
-      const localReceipts = await Promise.all(files
-        .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
-        .map(async (file) => {
-          const fileInfo = await FileSystem.getInfoAsync(`${RECEIPTS_DIRECTORY}/${file}`);
-          return {
-            id: file.split('.')[0],
-            uri: fileInfo.uri,
-            timestamp: new Date(fileInfo.modificationTime * 1000).toLocaleString(),
-            type: 'gallery'
-          };
-        }));
-
-      // Load server files
-      try {
-        const serverResponse = await fetch(`${SERVER_URL}/images`);
-        if (serverResponse.ok) {
-          const serverImages = await serverResponse.json();
-          const serverReceipts = serverImages.map(img => ({
-            id: img.filename.split('.')[0],
-            uri: img.url,
-            timestamp: new Date(img.timestamp).toLocaleString(),
-            type: 'server'
-          }));
-          
-          // Combine local and server receipts, removing duplicates by id
-          const allReceipts = [...localReceipts, ...serverReceipts];
-          const uniqueReceipts = Array.from(new Map(allReceipts.map(item => [item.id, item])).values());
-          setReceipts(uniqueReceipts);
-        } else {
-          setReceipts(localReceipts);
-        }
-      } catch (serverError) {
-        console.error('Error loading server receipts:', serverError);
-        setReceipts(localReceipts);
-      }
-    } catch (error) {
-      console.error('Error loading existing receipts:', error);
-    }
-  };
-
-  const saveToStorage = async (uri, filename) => {
-    try {
-      // First save locally
-      const destPath = `${RECEIPTS_DIRECTORY}/${filename}`;
-      await FileSystem.copyAsync({
-        from: uri,
-        to: destPath
-      });
-
-      // Then upload to server with retry logic
-      let retryCount = 0;
-      const maxRetries = 3;
-      let lastError = null;
-
-      while (retryCount < maxRetries) {
-        try {
-          // Convert image to base64 for reliable upload
-          const base64 = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-
-          const formData = new FormData();
-          formData.append('image', {
-            uri: `data:image/jpeg;base64,${base64}`,
-            type: 'image/jpeg',
-            name: filename
-          });
-
-          const response = await fetch(`${SERVER_URL}/upload`, {
-            method: 'POST',
-            body: formData,
-            headers: {
-              'Content-Type': 'multipart/form-data',
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
-          }
-
-          const serverResponse = await response.json();
-          if (retryCount > 0) {
-            console.log(`Upload succeeded on attempt ${retryCount + 1}`);
-          } else {
-            console.log('Upload succeeded on first attempt');
-          }
-          console.log('Server response:', serverResponse);
-          break; // Success, exit retry loop
-        } catch (uploadError) {
-          lastError = uploadError;
-          if (retryCount < maxRetries - 1) {
-            console.log(`Upload attempt ${retryCount + 1} failed, retrying...`);
-          } else {
-            console.log(`Upload attempt ${retryCount + 1} failed (final attempt)`);
-          }
-          retryCount++;
-          
-          if (retryCount < maxRetries) {
-            // Wait before retrying (exponential backoff)
-            const delay = 1000 * Math.pow(2, retryCount);
-            console.log(`Waiting ${delay/1000} seconds before next attempt...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-          }
-        }
-      }
-
-      if (retryCount === maxRetries && lastError) {
-        console.error('All upload attempts failed:', lastError);
-        // Continue with local save even if server upload fails
-      }
-
-      return destPath;
-    } catch (error) {
-      console.error('Error saving file:', error);
-      throw error;
+      Alert.alert('Error', 'Failed to initialize storage. Please restart the app.');
     }
   };
 
@@ -197,239 +117,695 @@ function BillsScreen({ navigation }) {
     return true;
   };
 
-  const pickImage = async () => {
-    setIsModalVisible(false);
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
+  const loadExistingReceipts = async () => {
+    try {
+      setLoading(true);
+      // Load local files first
+      const files = await FileSystem.readDirectoryAsync(RECEIPTS_DIRECTORY);
+      const localReceipts = await Promise.all(files
+        .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
+        .map(async (file) => {
+          const fileInfo = await FileSystem.getInfoAsync(`${RECEIPTS_DIRECTORY}/${file}`);
+          return {
+            id: file.split('.')[0],
+            uri: fileInfo.uri,
+            timestamp: new Date(fileInfo.modificationTime * 1000).toLocaleString(),
+            type: 'gallery'
+          };
+        }));
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 1,
-    });
+      // Set local receipts first
+      setReceipts(localReceipts);
 
-    if (!result.canceled) {
+      // Then try to load server files
       try {
-        const timestamp = Date.now();
-        const filename = `receipt_${timestamp}.jpg`;
-        const savedUri = await saveToStorage(result.assets[0].uri, filename);
-        
-        const newReceipt = {
-          id: timestamp.toString(),
-          uri: savedUri,
-          timestamp: new Date().toLocaleString(),
-          type: 'gallery'
-        };
-        setReceipts(prevReceipts => [newReceipt, ...prevReceipts]);
-      } catch (error) {
-        Alert.alert('Error', 'Failed to save receipt');
+        const serverResponse = await fetch(`${SERVER_URL}/images`);
+        if (serverResponse.ok) {
+          const serverImages = await serverResponse.json();
+          const serverReceipts = serverImages.map(img => ({
+            id: img.filename.split('.')[0],
+            uri: img.url,
+            timestamp: new Date(img.timestamp).toLocaleString(),
+            type: 'server'
+          }));
+          
+          // Combine local and server receipts, removing duplicates by id
+          const allReceipts = [...localReceipts, ...serverReceipts];
+          const uniqueReceipts = Array.from(new Map(allReceipts.map(item => [item.id, item])).values());
+          setReceipts(uniqueReceipts.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+        }
+      } catch (serverError) {
+        console.warn('Error loading server receipts:', serverError);
+        // Continue with local receipts only
       }
+    } catch (error) {
+      console.error('Error loading receipts:', error);
+      Alert.alert('Error', 'Failed to load receipts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pickImage = async () => {
+    try {
+      if (!await requestPermissions()) return;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        setIsModalVisible(false);
+        const asset = result.assets[0];
+        const filename = `receipt_${Date.now()}.jpg`;
+        await saveToStorage(asset.uri, filename);
+      }
+    } catch (error) {
+      console.error('Gallery error:', error);
+      Alert.alert('Error', 'Failed to process image from gallery');
     }
   };
 
   const takePhoto = async () => {
-    setIsModalVisible(false);
-    const hasPermission = await requestPermissions();
-    if (!hasPermission) return;
-
     try {
+      if (!await requestPermissions()) return;
+
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false,
-        quality: 0.7,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        const timestamp = Date.now();
-        const filename = `receipt_${timestamp}.jpg`;
-        
-        try {
-          // Show loading indicator
-          setLoading(true);
-          
-          const savedUri = await saveToStorage(result.assets[0].uri, filename);
-          
-          const newReceipt = {
-            id: timestamp.toString(),
-            uri: savedUri,
-            timestamp: new Date().toLocaleString(),
-            type: 'camera'
-          };
-          setReceipts(prevReceipts => [newReceipt, ...prevReceipts]);
-          
-          // Refresh the receipts list
-          await loadExistingReceipts();
+        setIsModalVisible(false);
+        const asset = result.assets[0];
+        const filename = `receipt_${Date.now()}.jpg`;
+        await saveToStorage(asset.uri, filename);
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      Alert.alert('Error', 'Failed to process camera image');
+    }
+  };
 
+  const saveToStorage = async (uri, filename) => {
+    try {
+      setLoading(true); // Show loading state
+      
+      // Save locally first
+      const destPath = `${RECEIPTS_DIRECTORY}/${filename}`;
+      await FileSystem.copyAsync({
+        from: uri,
+        to: destPath
+      });
+
+      // Verify the file was saved locally
+      const fileInfo = await FileSystem.getInfoAsync(destPath);
+      if (!fileInfo.exists) {
+        throw new Error('Failed to save receipt locally');
+      }
+
+      // Try to upload to server
+      try {
+        const formData = new FormData();
+        formData.append('image', {
+          uri: Platform.OS === 'android' ? uri : uri.replace('file://', ''),
+          type: 'image/jpeg',
+          name: filename
+        });
+
+        const response = await fetch(`${SERVER_URL}/upload`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
+
+        const serverResponse = await response.json();
+
+        if (!response.ok) {
+          throw new Error(serverResponse.error || 'Failed to process receipt');
+        }
+
+        if (serverResponse.data) {
+          if (!serverResponse.data.items || serverResponse.data.items.length === 0) {
+            // Delete the local file since it's not a valid receipt
+            await FileSystem.deleteAsync(destPath);
+            throw new Error(
+              'No items found in the receipt. Please make sure:\n\n' +
+              '• The image is clear and well-lit\n' +
+              '• All prices are visible\n' +
+              '• The receipt text is readable\n' +
+              '• The image is not blurry'
+            );
+          }
+          await handleReceiptProcessed(serverResponse.data);
+          
           // Show success message
           Alert.alert(
             'Success',
-            'Receipt saved successfully!',
-            [{ text: 'OK' }]
+            `Receipt processed successfully!\nFound ${serverResponse.data.items.length} items.`,
+            [{ text: 'OK', onPress: () => setShowSuccess(true) }]
           );
-        } catch (saveError) {
-          console.error('Save error:', saveError);
-          Alert.alert(
-            'Upload Warning',
-            'Image saved locally but might have issues with server upload.',
-            [{ text: 'OK' }]
-          );
-        } finally {
-          setLoading(false);
         }
+      } catch (uploadError) {
+        // Delete the local file if server processing failed
+        await FileSystem.deleteAsync(destPath);
+        throw new Error(uploadError.message || 'Failed to process receipt');
       }
-    } catch (cameraError) {
-      console.error('Camera error:', cameraError);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-    }
-  };
 
-  const deleteReceipt = async (item) => {
-    try {
-      // Show confirmation dialog
+      // Reload receipts list after successful processing
+      await loadExistingReceipts();
+      return destPath;
+    } catch (error) {
+      console.error('Save error:', error);
       Alert.alert(
-        'Delete Receipt',
-        'Are you sure you want to delete this receipt?',
+        'Receipt Processing Failed',
+        error.message || 'Failed to process receipt. Please try again with a clearer image.',
         [
-          {
-            text: 'Cancel',
-            style: 'cancel'
+          { 
+            text: 'OK',
+            style: 'default'
           },
           {
-            text: 'Delete',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                // Delete from local storage
-                if (item.uri.startsWith(FileSystem.documentDirectory)) {
-                  await FileSystem.deleteAsync(item.uri);
-                }
-
-                // Remove from state
-                setReceipts(prevReceipts => 
-                  prevReceipts.filter(receipt => receipt.id !== item.id)
-                );
-
-              } catch (error) {
-                console.error('Delete error:', error);
-                Alert.alert('Error', 'Failed to delete receipt');
-              }
-            }
+            text: 'Try Again',
+            onPress: () => setIsModalVisible(true),
+            style: 'cancel'
           }
         ]
       );
-    } catch (error) {
-      console.error('Delete error:', error);
-      Alert.alert('Error', 'Failed to delete receipt');
+      throw error;
+    } finally {
+      setLoading(false); // Hide loading state
     }
   };
 
-  const renderReceipt = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.receiptItem}
-      onPress={() => {
-        // TODO: Add full screen view of receipt
-        console.log('View receipt:', item.uri);
-      }}
-    >
-      <Image 
-        source={{ uri: item.uri }} 
-        style={styles.receiptImage}
-        resizeMode="cover"
-      />
-      <View style={styles.receiptInfo}>
-        <View style={styles.receiptDetails}>
-          <MaterialIcons 
-            name={item.type === 'camera' ? 'camera-alt' : 'photo-library'} 
-            size={16} 
-            color={COLORS.gray}
-          />
-          <Text style={styles.receiptTimestamp}>{item.timestamp}</Text>
-        </View>
-        <TouchableOpacity 
-          style={styles.deleteButton}
-          onPress={() => deleteReceipt(item)}
-        >
-          <MaterialIcons name="delete" size={20} color={COLORS.error} />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  const deleteReceipt = async (receipt) => {
+    if (!receipt || !receipt.id) return;
 
-  return (
-    <View style={styles.container}>
-      <StatusBar />
-      <View style={styles.headerContainer}>
-        <SafeAreaView style={styles.headerSafeArea}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-            <Image 
-              source={headerLogo}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <TouchableOpacity onPress={() => setIsModalVisible(true)}>
-              <Ionicons name="add" size={24} color={COLORS.primary} />
-            </TouchableOpacity>
-          </View>
-        </SafeAreaView>
-      </View>
+    Alert.alert(
+      'Delete Receipt',
+      'Are you sure you want to delete this receipt?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              
+              // Delete local file if it exists
+              if (receipt.uri) {
+                try {
+                  await FileSystem.deleteAsync(receipt.uri, { idempotent: true });
+                } catch (err) {
+                  console.log('Local file deletion error:', err);
+                }
+              }
+              
+              // Delete from local state
+              setReceipts(prevReceipts => prevReceipts.filter(r => r.id !== receipt.id));
+              
+            } catch (error) {
+              handleError(error, 'deleting receipt');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
 
-      <View style={styles.contentContainer}>
-        <Text style={styles.title}>Your Receipts</Text>
+  const generateExcel = async (receiptData) => {
+    try {
+      console.log('Generating Excel for receipt data:', receiptData);
+      
+      const response = await fetch(`${SERVER_URL}/api/generate-excel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(receiptData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate Excel file');
+      }
+
+      const result = await response.json();
+      console.log('Excel generation result:', result);
+
+      // Download the Excel file
+      if (result.data && result.data.filePath) {
+        const filename = result.data.filename;
+        const excelDestPath = `${FileSystem.documentDirectory}excel/${filename}`;
         
-        <FlatList
-          data={receipts}
-          renderItem={renderReceipt}
-          keyExtractor={item => item.id}
-          numColumns={COLUMN_COUNT}
-          contentContainerStyle={styles.receiptsList}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyState}>
+        // Download the file
+        await FileSystem.downloadAsync(
+          `${SERVER_URL}/excel/${filename}`,
+          excelDestPath
+        );
+
+        console.log('Excel file saved to:', excelDestPath);
+      }
+    } catch (error) {
+      console.error('Error generating Excel:', error);
+      Alert.alert(
+        'Error',
+        `Failed to generate Excel file: ${error.message}`
+      );
+    }
+  };
+
+  const handleReceiptProcessed = async (receiptData) => {
+    try {
+      clearError(); // Clear any existing errors
+
+      if (!receiptData.success) {
+        // Show the specific error details if available
+        throw new Error(receiptData.details || receiptData.error || 'Failed to process receipt');
+      }
+
+      // Check if we have valid items
+      if (!receiptData.items || receiptData.items.length === 0) {
+        console.error('Receipt data:', JSON.stringify(receiptData, null, 2));
+        
+        // Check if we have partial data
+        if (receiptData.partialData) {
+          throw new Error(
+            `Could not find any items in the receipt from ${receiptData.partialData.storeName} ` +
+            `dated ${receiptData.partialData.date}.\n\n` +
+            'Please ensure the receipt image is clear and all prices are visible.'
+          );
+        }
+
+        throw new Error(
+          receiptData.details || 
+          'No items found in receipt. The OCR process could not identify any items with prices. ' +
+          'Please make sure the receipt image is clear and well-lit.'
+        );
+      }
+
+      // Format data for Excel generation
+      const excelData = {
+        storeName: receiptData.storeName,
+        date: receiptData.date,
+        items: receiptData.items.map(item => ({
+          name: item.name,
+          price: item.price
+        }))
+      };
+
+      // Generate Excel file
+      await generateExcel(excelData);
+
+      // Show success message with details
+      Alert.alert(
+        'Success',
+        `Receipt processed successfully!\n\n` +
+        `Store: ${receiptData.storeName}\n` +
+        `Date: ${receiptData.date}\n` +
+        `Items found: ${receiptData.items.length}\n` +
+        `Total amount: $${receiptData.items.reduce((sum, item) => sum + item.price, 0).toFixed(2)}`
+      );
+
+      // Clear any existing errors after success
+      clearError();
+    } catch (error) {
+      handleError(error, 'processing receipt');
+      
+      // Determine if this is a screenshot error
+      const isScreenshotError = error.message.includes('screenshot') || 
+                               error.message.includes('error message');
+
+      // Show detailed error message
+      Alert.alert(
+        isScreenshotError ? 'Invalid Image' : 'Error Processing Receipt',
+        error.message,
+        [
+          { 
+            text: 'Try Again',
+            onPress: () => {
+              clearError();
+              setIsModalVisible(true);
+            }
+          },
+          {
+            text: 'Help',
+            onPress: () => {
+              Alert.alert(
+                'How to Take a Good Receipt Photo',
+                '• Place the receipt on a flat, well-lit surface\n' +
+                '• Make sure the entire receipt is visible\n' +
+                '• Avoid shadows and glare\n' +
+                '• Hold the camera steady to avoid blur\n' +
+                '• Take a photo of the actual receipt, not a screenshot\n' +
+                '• Ensure prices are clearly visible\n' +
+                '• Avoid crumpled or damaged receipts'
+              );
+            }
+          },
+          {
+            text: 'Cancel',
+            style: 'cancel',
+            onPress: clearError
+          }
+        ]
+      );
+    }
+  };
+
+  const toggleSelectionMode = () => {
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedReceipts(new Set());
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedReceipts.size === receipts.length) {
+      // If all are selected, unselect all
+      setSelectedReceipts(new Set());
+    } else {
+      // Select all
+      setSelectedReceipts(new Set(receipts.map(receipt => receipt.id)));
+    }
+  };
+
+  const toggleReceiptSelection = (receiptId) => {
+    const newSelected = new Set(selectedReceipts);
+    if (newSelected.has(receiptId)) {
+      newSelected.delete(receiptId);
+    } else {
+      newSelected.add(receiptId);
+    }
+    setSelectedReceipts(newSelected);
+  };
+
+  const deleteSelectedReceipts = async () => {
+    if (selectedReceipts.size === 0) return;
+
+    Alert.alert(
+      'Delete Selected Receipts',
+      `Are you sure you want to delete ${selectedReceipts.size} receipt(s)?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const selectedReceiptsList = receipts.filter(receipt => selectedReceipts.has(receipt.id));
+              
+              // Delete each receipt
+              for (const receipt of selectedReceiptsList) {
+                // Delete local file if it exists
+                if (receipt.uri) {
+                  try {
+                    await FileSystem.deleteAsync(receipt.uri, { idempotent: true });
+                  } catch (err) {
+                    console.log('Local file deletion error:', err);
+                  }
+                }
+              }
+              
+              // Update local state
+              setReceipts(prevReceipts => 
+                prevReceipts.filter(receipt => !selectedReceipts.has(receipt.id))
+              );
+              
+              setSelectedReceipts(new Set());
+              setIsSelectionMode(false);
+              Alert.alert('Success', 'Selected receipts deleted successfully');
+            } catch (error) {
+              handleError(error, 'deleting selected receipts');
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleSuccess = () => {
+    setShowSuccess(true);
+    setTimeout(() => {
+      setShowSuccess(false);
+    }, 2000); // Hide after 2 seconds
+  };
+
+  const handleReceiptUpload = async (receiptData) => {
+    try {
+      setLoading(true);
+      // Check if receipt is valid (has items)
+      if (receiptData.items && receiptData.items.length > 0) {
+        // Add receipt to state
+        setReceipts(prevReceipts => [...prevReceipts, receiptData]);
+        handleSuccess();
+      }
+      // If invalid, just silently ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderReceipt = ({ item }) => {
+    const date = new Date(item.timestamp);
+    const formattedTime = date.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: 'numeric',
+      hour12: true 
+    });
+
+    // Format the URI based on whether it's a local or server image
+    const imageUri = item.type === 'server' 
+      ? `${SERVER_URL}/images/${item.id}.jpg`
+      : item.uri;
+
+    console.log('Rendering receipt with URI:', imageUri); // Debug log
+
+    return (
+      <View style={styles.cardContainer}>
+        <TouchableOpacity 
+          style={[
+            styles.receiptCard,
+            selectedReceipts.has(item.id) && styles.selectedReceipt,
+          ]}
+          onPress={() => {
+            if (isSelectionMode) {
+              toggleReceiptSelection(item.id);
+            } else {
+              // TODO: Add full screen view of receipt
+              console.log('View receipt:', imageUri);
+            }
+          }}
+          onLongPress={() => {
+            if (!isSelectionMode) {
+              setIsSelectionMode(true);
+              toggleReceiptSelection(item.id);
+            }
+          }}
+        >
+          {item.uri ? (
+            <>
+              <Image 
+                source={{ uri: imageUri }} 
+                style={styles.receiptImage}
+                resizeMode="cover"
+                onError={(error) => console.error('Image loading error:', error.nativeEvent.error)}
+              />
+              <View style={styles.receiptContent}>
+                <View style={styles.receiptHeader}>
+                  <Text style={styles.storeName} numberOfLines={1}>
+                    {item.storeName || 'Receipt'}
+                  </Text>
+                  {item.items && (
+                    <View style={styles.itemCountContainer}>
+                      <MaterialIcons name="receipt" size={12} color={COLORS.primary} />
+                      <Text style={styles.itemCount}>
+                        {item.items.length} items
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <View style={styles.cardFooter}>
+                  <View style={styles.dateContainer}>
+                    <MaterialIcons 
+                      name={item.type === 'camera' ? 'camera-alt' : 'photo-library'} 
+                      size={16} 
+                      color={COLORS.primary} 
+                    />
+                    <Text style={styles.dateText}>{formattedTime}</Text>
+                  </View>
+                  {!isSelectionMode && (
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => deleteReceipt(item)}
+                    >
+                      <MaterialIcons name="delete-outline" size={20} color={COLORS.error} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </>
+          ) : (
+            <View style={styles.uploadContainer}>
+              <MaterialIcons name="add-photo-alternate" size={32} color={COLORS.primary} />
               <TouchableOpacity 
                 style={styles.uploadButton}
                 onPress={() => setIsModalVisible(true)}
               >
-                <MaterialIcons name="receipt-long" size={32} color={COLORS.primary} />
-                <Text style={styles.uploadText}>Upload Receipts</Text>
+                <Text style={styles.uploadButtonText}>Upload New Receipt</Text>
               </TouchableOpacity>
-              <Text style={styles.emptyStateText}>No receipts uploaded yet</Text>
             </View>
           )}
-        />
+
+          {isSelectionMode && (
+            <View style={styles.checkboxContainer}>
+              <MaterialIcons 
+                name={selectedReceipts.has(item.id) ? "check-circle" : "radio-button-unchecked"} 
+                size={28} 
+                color={selectedReceipts.has(item.id) ? COLORS.primary : '#fff'} 
+              />
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
+    );
+  };
 
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isModalVisible}
-        onRequestClose={() => setIsModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Receipt</Text>
-            
-            <TouchableOpacity style={styles.modalButton} onPress={takePhoto}>
-              <MaterialIcons name="camera-alt" size={24} color={COLORS.primary} />
-              <Text style={styles.modalButtonText}>Take Photo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalButton} onPress={pickImage}>
-              <MaterialIcons name="photo-library" size={24} color={COLORS.primary} />
-              <Text style={styles.modalButtonText}>Choose from Gallery</Text>
-            </TouchableOpacity>
-
+  return (
+    <View style={styles.container}>
+      <CustomStatusBar />
+      <View style={styles.statusBarBackground} />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.headerContainer}>
+          <View style={styles.header}>
             <TouchableOpacity 
-              style={[styles.modalButton, styles.cancelButton]}
-              onPress={() => setIsModalVisible(false)}
+              style={styles.headerButton}
+              onPress={toggleSelectAll}
             >
-              <Text style={[styles.modalButtonText, styles.cancelButtonText]}>Cancel</Text>
+              <MaterialIcons name="select-all" size={24} color={COLORS.primary} />
             </TouchableOpacity>
+            <Text style={styles.headerTitle}>Your Receipts</Text>
+            <View style={styles.headerRightButtons}>
+              <TouchableOpacity
+                style={[styles.headerButton, styles.headerButtonMargin]}
+                onPress={deleteSelectedReceipts}
+              >
+                <MaterialIcons name="delete" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerButton}
+                onPress={() => setIsModalVisible(true)}
+              >
+                <MaterialIcons name="add" size={24} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </Modal>
+
+        <View style={styles.contentContainer}>
+          {loading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+            </View>
+          ) : receipts.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="receipt-long" size={48} color={COLORS.primary} />
+              <Text style={styles.emptyTitle}>No receipts yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Add your first receipt by tapping the + button
+              </Text>
+              <TouchableOpacity 
+                style={styles.addFirstButton}
+                onPress={() => setIsModalVisible(true)}
+              >
+                <MaterialIcons name="add" size={24} color={COLORS.white} />
+                <Text style={styles.addFirstButtonText}>Add Receipt</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={receipts}
+              renderItem={renderReceipt}
+              keyExtractor={item => item.id}
+              numColumns={COLUMN_COUNT}
+              contentContainerStyle={styles.receiptsList}
+              showsVerticalScrollIndicator={false}
+              columnWrapperStyle={styles.row}
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={loadExistingReceipts}
+                  colors={[COLORS.primary]}
+                />
+              }
+            />
+          )}
+        </View>
+
+        <Modal
+          visible={isModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setIsModalVisible(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Receipt</Text>
+                <TouchableOpacity 
+                  style={styles.closeButton}
+                  onPress={() => setIsModalVisible(false)}
+                >
+                  <MaterialIcons name="close" size={24} color={COLORS.gray} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.modalOptions}>
+                <TouchableOpacity 
+                  style={styles.modalOption} 
+                  onPress={takePhoto}
+                >
+                  <View style={styles.iconContainer}>
+                    <MaterialIcons name="camera-alt" size={24} color={COLORS.white} />
+                  </View>
+                  <View style={styles.optionTextContainer}>
+                    <Text style={styles.optionTitle}>Take Photo</Text>
+                    <Text style={styles.optionDescription}>Capture a new receipt</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={24} color={COLORS.gray} />
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.modalOption} 
+                  onPress={pickImage}
+                >
+                  <View style={styles.iconContainer}>
+                    <MaterialIcons name="photo-library" size={24} color={COLORS.white} />
+                  </View>
+                  <View style={styles.optionTextContainer}>
+                    <Text style={styles.optionTitle}>Choose from Gallery</Text>
+                    <Text style={styles.optionDescription}>Select an existing photo</Text>
+                  </View>
+                  <MaterialIcons name="chevron-right" size={24} color={COLORS.gray} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
     </View>
   );
 }
@@ -439,113 +815,215 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
+  statusBarBackground: {
+    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
+    backgroundColor: COLORS.primary,
+  },
+  safeArea: {
+    flex: 1,
+  },
   headerContainer: {
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-    paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0,
-    zIndex: 2,
-    elevation: Platform.OS === 'android' ? 4 : 0,
-    shadowColor: Platform.OS === 'ios' ? '#000' : undefined,
-    shadowOffset: Platform.OS === 'ios' ? { width: 0, height: 2 } : undefined,
-    shadowOpacity: Platform.OS === 'ios' ? 0.2 : undefined,
-    shadowRadius: Platform.OS === 'ios' ? 2 : undefined,
-  },
-  headerSafeArea: {
-    backgroundColor: COLORS.white,
+    ...SHADOWS.light,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SIZES.padding,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingTop: SIZES.padding * 1.5,
+    paddingBottom: SIZES.padding,
     backgroundColor: COLORS.white,
-    height: 56,
   },
-  logo: {
+  headerRightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
+    padding: SIZES.base,
+    width: 40,
     height: 40,
-    width: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    ...SHADOWS.light,
+  },
+  headerButtonMargin: {
+    marginRight: SIZES.base,
+  },
+  headerTitle: {
+    fontSize: SIZES.large,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
   },
   contentContainer: {
     flex: 1,
-    backgroundColor: COLORS.white,
-    padding: SIZES.padding,
+    paddingTop: SIZES.padding,
   },
   title: {
     fontSize: SIZES.fontSize.title,
-    fontWeight: '600',
+    fontFamily: FONTS.medium,
     color: COLORS.black,
     marginBottom: SIZES.padding,
+    paddingHorizontal: SIZES.padding,
   },
-  receiptsList: {
-    gap: SIZES.padding,
+  row: {
+    justifyContent: 'flex-start',
+    gap: CARD_MARGIN * 2,
   },
-  receiptItem: {
-    width: ITEM_WIDTH,
-    marginBottom: SIZES.padding,
-    marginRight: SIZES.padding,
-    borderRadius: SIZES.radius,
+  cardContainer: {
+    width: CARD_WIDTH,
+    marginBottom: 16,
+  },
+  receiptCard: {
     backgroundColor: COLORS.white,
-    ...Platform.select({
-      ios: {
-        shadowColor: COLORS.black,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   receiptImage: {
     width: '100%',
-    height: ITEM_WIDTH * 1.4,
-    borderRadius: SIZES.radius,
+    height: CARD_WIDTH * 1.2,
+    backgroundColor: COLORS.lightGray,
   },
-  receiptInfo: {
+  receiptContent: {
+    padding: 12,
+  },
+  receiptHeader: {
+    marginBottom: 8,
+  },
+  storeName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginBottom: 4,
+  },
+  itemCountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SIZES.base,
-    justifyContent: 'space-between',
+    gap: 4,
   },
-  receiptDetails: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SIZES.base,
-    flex: 1,
+  itemCount: {
+    fontSize: 12,
+    color: COLORS.text.primary,
+    fontWeight: '500',
   },
-  receiptTimestamp: {
-    fontSize: SIZES.fontSize.small,
-    color: COLORS.gray,
-    flex: 1,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
+  uploadContainer: {
+    height: CARD_WIDTH * 1.2,
+    backgroundColor: '#F8F8F8',
     justifyContent: 'center',
-    paddingVertical: SIZES.padding * 2,
-  },
-  uploadButton: {
-    flexDirection: 'row',
     alignItems: 'center',
-    padding: SIZES.padding,
+    padding: 16,
+    borderStyle: 'dashed',
     borderWidth: 1,
     borderColor: COLORS.primary,
-    borderRadius: SIZES.radius,
-    backgroundColor: COLORS.white,
-    marginBottom: SIZES.padding,
-    gap: SIZES.base,
+    borderRadius: 12,
   },
-  uploadText: {
-    fontSize: SIZES.fontSize.body,
-    fontWeight: FONTS.semiBold,
-    color: COLORS.primary,
+  uploadButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 12,
   },
-  emptyStateText: {
-    fontSize: SIZES.fontSize.body,
+  uploadButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  dateContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dateText: {
+    fontSize: 12,
+    color: COLORS.text.primary,
+    fontWeight: '500',
+  },
+  checkboxContainer: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderRadius: 14,
+    padding: 2,
+  },
+  selectedReceipt: {
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+  },
+  successBanner: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.success,
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    elevation: 5,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  successText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SIZES.padding,
+  },
+  emptyTitle: {
+    fontSize: SIZES.fontSize.title,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
+    marginTop: SIZES.padding,
+    marginBottom: SIZES.base,
+  },
+  emptySubtitle: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontFamily: FONTS.regular,
     color: COLORS.gray,
     textAlign: 'center',
+    marginBottom: SIZES.padding * 2,
+  },
+  addFirstButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SIZES.padding,
+    paddingVertical: SIZES.base,
+    borderRadius: SIZES.radius,
+    gap: SIZES.base,
+  },
+  addFirstButtonText: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontFamily: FONTS.medium,
+    color: COLORS.white,
   },
   modalContainer: {
     flex: 1,
@@ -554,43 +1032,86 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: COLORS.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: SIZES.padding,
+    borderTopLeftRadius: SIZES.radius * 2,
+    borderTopRightRadius: SIZES.radius * 2,
+    paddingTop: SIZES.padding,
+    paddingBottom: Platform.OS === 'ios' ? 34 : SIZES.padding,
+    ...SHADOWS.medium,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingBottom: SIZES.padding,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.lightGray,
   },
   modalTitle: {
-    fontSize: SIZES.fontSize.title,
-    fontWeight: FONTS.bold,
-    color: COLORS.primary,
-    marginBottom: SIZES.padding,
-    textAlign: 'center',
+    fontSize: SIZES.large,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
   },
-  modalButton: {
+  closeButton: {
+    padding: SIZES.base,
+  },
+  modalOptions: {
+    paddingTop: SIZES.padding,
+  },
+  modalOption: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: SIZES.padding,
-    borderRadius: SIZES.radius,
-    backgroundColor: COLORS.lightGray,
-    marginBottom: SIZES.base,
-  },
-  modalButtonText: {
-    fontSize: SIZES.fontSize.body,
-    fontWeight: FONTS.semiBold,
-    color: COLORS.primary,
-    marginLeft: SIZES.padding,
-  },
-  cancelButton: {
     backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    marginTop: SIZES.base,
   },
-  cancelButtonText: {
-    color: COLORS.primary,
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SIZES.padding,
+  },
+  optionTextContainer: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontSize: SIZES.font,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  optionDescription: {
+    fontSize: SIZES.small,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
   },
   deleteButton: {
-    padding: 4,
+    padding: SIZES.xs,
+  },
+  selectionText: {
+    fontSize: 16,
+    color: COLORS.text.primary,
+    fontWeight: '600',
+  },
+  logo: {
+    height: 32,
+    width: 100,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  receiptsList: {
+    padding: SIZES.padding,
   },
 });
 
-export default withBrownStatusBar(BillsScreen); 
+export default BillsScreen; 

@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { COLORS, SIZES, SHADOWS } from '../constants/theme';
+import { COLORS, SIZES, SHADOWS, FONTS } from '../constants/theme';
 import { withBrownStatusBar } from '../utils/screenUtils';
 
 function SignInScreen({ navigation }) {
@@ -51,7 +51,7 @@ function SignInScreen({ navigation }) {
               resizeMode="contain"
             />
 
-            <Text style={styles.welcomeText}>Welcome Back!</Text>
+            <Text style={styles.title}>Welcome Back!</Text>
             
             <View style={styles.form}>
               <TextInput
@@ -145,20 +145,28 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: SIZES.padding * 2,
-    paddingBottom: SIZES.padding * 2,
+    padding: SIZES.padding,
+    justifyContent: 'center',
   },
   logo: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     alignSelf: 'center',
-    marginVertical: SIZES.padding,
+    marginBottom: SIZES.padding * 2,
   },
-  welcomeText: {
+  title: {
     fontSize: SIZES.fontSize.title,
-    fontWeight: 'bold',
-    color: COLORS.primary,
-    marginBottom: SIZES.padding,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
+    textAlign: 'center',
+    marginBottom: SIZES.base,
+  },
+  subtitle: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginBottom: SIZES.padding * 2,
   },
   form: {
     gap: SIZES.padding * 0.7,

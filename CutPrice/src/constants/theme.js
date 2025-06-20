@@ -1,11 +1,29 @@
 export const COLORS = {
-    primary: '#462009',  // Brown color from the design
-    white: '#FFFFFF',
-    black: '#000000',
+    primary: '#462009',  // Main brown color
+    primaryLight: '#693010', // Lighter brown for hover/active states
+    primaryDark: '#2E1506', // Darker brown for text on light backgrounds
+    secondary: '#663300',
+    error: '#FF0000',
+    success: '#4CAF50',
     gray: '#757575',
     lightGray: '#EFEFEF',
+    white: '#FFFFFF',
+    black: '#000000',
+    overlay: 'rgba(70, 32, 9, 0.5)', // Brown overlay
     inputBackground: '#F8F8F8',
     inputBorder: '#E8E8E8',
+    background: '#F8F8F8',
+    card: '#FFFFFF',
+    text: {
+        primary: '#462009',
+        secondary: '#693010',
+        gray: '#757575',
+        light: '#FFFFFF'
+    },
+    border: {
+        light: '#E8E8E8',
+        dark: '#462009'
+    }
 };
 
 export const SIZES = {
@@ -17,13 +35,12 @@ export const SIZES = {
     extraLarge: 24,
     padding: 16,
     radius: 12,
-    
     fontSize: {
-        title: 28,
-        subtitle: 18,
-        body: 16,
-        small: 14,
-    },
+        title: 24,
+        subtitle: 16,
+        body: 14,
+        caption: 12,
+    }
 };
 
 export const FONTS = {

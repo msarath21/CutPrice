@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
@@ -6,307 +5,332 @@ const path = require('path');
 const fs = require('fs');
 const ocrProcessor = require('./ocrProcessor');
 const excelGenerator = require('./excelGenerator');
-const mongoose = require('mongoose');
-const productRoutes = require('./routes/products');
-const storeRoutes = require('./routes/stores');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const DEFAULT_PORT = 3001;
+let server = null;
+
+// Configure paths
+const UPLOAD_PATH = path.join('E:', 'LocalStorage');
+const EXCEL_PATH = path.join('E:', 'LocalStorage', 'excel_exports');
+
+// Configure multer for handling file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(UPLOAD_PATH)) {
+      fs.mkdirSync(UPLOAD_PATH, { recursive: true });
+    }
+    cb(null, UPLOAD_PATH);
+  },
+  filename: function (req, file, cb) {
+    cb(null, 'receipt_' + Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// Create storage directories if they don't exist
-const storageDir = path.join('E:', 'LocalStorage');
-const excelDir = path.join(storageDir, 'excel_exports');
-
-try {
-    // Test write permissions by creating directories
-    if (!fs.existsSync(storageDir)) {
-        fs.mkdirSync(storageDir, { recursive: true });
-        console.log('Main storage directory created at:', storageDir);
-    }
-    
-    if (!fs.existsSync(excelDir)) {
-        fs.mkdirSync(excelDir, { recursive: true });
-        console.log('Excel directory created at:', excelDir);
-    }
-    
-    // Test write permissions by creating and removing a test file
-    const testFile = path.join(storageDir, 'test.txt');
-    fs.writeFileSync(testFile, 'test');
-    fs.unlinkSync(testFile);
-    
-    console.log('Storage directories verified with write permissions:');
-    console.log('Storage directory:', storageDir);
-    console.log('Excel directory:', excelDir);
-} catch (error) {
-    console.error('Error with storage directories:', error);
-    console.error('Please ensure the application has write permissions to:', storageDir);
-    process.exit(1); // Exit if we can't create/write to essential directories
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        // Double-check directory exists before saving
-        if (!fs.existsSync(storageDir)) {
-            fs.mkdirSync(storageDir, { recursive: true });
-        }
-        cb(null, storageDir);
-    },
-    filename: function (req, file, cb) {
-        const timestamp = Date.now();
-        const ext = path.extname(file.originalname) || '.jpg';
-        cb(null, `receipt_${timestamp}${ext}`);
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
-    fileFilter: (req, file, cb) => {
-        // Accept only image files
-        if (file.mimetype.startsWith('image/')) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only image files are allowed'));
-        }
-    },
-    limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
-    }
-});
-
-// Helper function to save base64 image
-const saveBase64Image = (base64Data, filename) => {
-    try {
-        const base64Image = base64Data.split(';base64,').pop();
-        const filePath = path.join(storageDir, filename);
-        
-        // Ensure directory exists before writing
-        if (!fs.existsSync(storageDir)) {
-            fs.mkdirSync(storageDir, { recursive: true });
-        }
-        
-        fs.writeFileSync(filePath, base64Image, { encoding: 'base64' });
-        console.log('Base64 image saved successfully:', filePath);
-        return filePath;
-    } catch (error) {
-        console.error('Error saving base64 image:', error);
-        throw error;
-    }
-};
-
-// Serve static files from the storage directory
-app.use('/images', express.static(storageDir));
-
-// Add request logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
-});
-
-// Upload endpoint
-app.post('/upload', upload.single('image'), async (req, res) => {
-    try {
-        let filename;
-        let imageUrl;
-        let filePath;
-
-        console.log('Starting upload processing...');
-        console.log('Request body:', req.body);
-        console.log('Request file:', req.file);
-
-        if (req.file) {
-            // Regular file upload
-            filename = req.file.filename;
-            imageUrl = `http://localhost:${port}/images/${filename}`;
-            filePath = req.file.path;
-            console.log('Received file upload:', filename);
-        } else if (req.body.image && req.body.image.uri && req.body.image.uri.startsWith('data:image')) {
-            // Base64 image upload
-            const timestamp = Date.now();
-            const ext = req.body.image.name ? path.extname(req.body.image.name) : '.jpg';
-            filename = `receipt_${timestamp}${ext}`;
-            filePath = saveBase64Image(req.body.image.uri, filename);
-            imageUrl = `http://localhost:${port}/images/${filename}`;
-            console.log('Received base64 image:', filename);
-        } else {
-            console.log('Invalid upload request');
-            return res.status(400).json({ 
-                error: 'No valid image data provided',
-                body: req.body,
-                file: req.file 
-            });
-        }
-
-        // Process the new receipt image immediately
-        let receiptData = null;
-        let excelFile = null;
-        try {
-            console.log('Processing receipt with OCR:', filePath);
-            receiptData = await ocrProcessor.processImage(filePath);
-            console.log('OCR Result:', receiptData);
-
-            if (receiptData) {
-                console.log('Generating Excel file for receipt...');
-                const excelPath = await excelGenerator.generateExcel(receiptData);
-                excelFile = path.basename(excelPath);
-                console.log('Excel file generated:', excelFile);
-            }
-        } catch (error) {
-            console.error('Processing error:', error);
-            // Continue even if processing fails
-        }
-        
-        res.json({
-            success: true,
-            imageUrl: imageUrl,
-            filename: filename,
-            receiptProcessed: receiptData !== null,
-            excelFile: excelFile
-        });
-    } catch (error) {
-        console.error('Upload error:', error);
-        res.status(500).json({ 
-            error: 'Failed to upload file',
-            message: error.message
-        });
-    }
-});
-
-// Get all images
-app.get('/images', (req, res) => {
-    try {
-        const files = fs.readdirSync(storageDir);
-        const images = files
-            .filter(file => ['.jpg', '.jpeg', '.png'].includes(path.extname(file).toLowerCase()))
-            .map(file => ({
-                filename: file,
-                url: `http://localhost:${port}/images/${file}`,
-                timestamp: fs.statSync(path.join(storageDir, file)).mtime
-            }));
-        res.json(images);
-    } catch (error) {
-        console.error('Error getting images:', error);
-        res.status(500).json({ error: 'Failed to get images' });
-    }
-});
-
-// Process receipts and generate Excel
-app.post('/process-receipts', async (req, res) => {
-    try {
-        const { type = 'daily' } = req.body; // type can be 'daily', 'weekly', or 'monthly'
-        
-        // Get all image files
-        const files = fs.readdirSync(storageDir);
-        const imageFiles = files.filter(file => 
-            ['.jpg', '.jpeg', '.png'].includes(path.extname(file).toLowerCase())
-        );
-
-        // Process each image with OCR
-        const receiptsData = [];
-        for (const file of imageFiles) {
-            const imagePath = path.join(storageDir, file);
-            try {
-                const receiptData = await ocrProcessor.processImage(imagePath);
-                if (receiptData) {
-                    receiptsData.push(receiptData);
-                }
-            } catch (error) {
-                console.error(`Error processing image ${file}:`, error);
-                // Continue with other images even if one fails
-            }
-        }
-
-        // Generate Excel file
-        const excelFilePath = await excelGenerator.generateExcel(receiptsData, type);
-        
-        res.json({
-            success: true,
-            message: 'Excel file generated successfully',
-            excelFile: path.basename(excelFilePath),
-            processedReceipts: receiptsData.length
-        });
-    } catch (error) {
-        console.error('Error processing receipts:', error);
-        res.status(500).json({ error: 'Failed to process receipts' });
-    }
-});
-
-// Download Excel file
-app.get('/download-excel/:filename', (req, res) => {
-    try {
-        const filename = req.params.filename;
-        const filePath = path.join(excelDir, filename);
-        
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({ error: 'Excel file not found' });
-        }
-
-        res.download(filePath);
-    } catch (error) {
-        console.error('Error downloading Excel file:', error);
-        res.status(500).json({ error: 'Failed to download Excel file' });
-    }
-});
+app.use(express.json());
+app.use('/uploads', express.static(UPLOAD_PATH));
+app.use('/excel', express.static(EXCEL_PATH));
 
 // Routes
-app.use('/api/products', productRoutes);
-app.use('/api/stores', storeRoutes);
+app.post('/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image file provided' });
+    }
 
-// MongoDB Connection
-const MONGODB_URI = 'mongodb://localhost:27017/cutprice';
+    const imagePath = req.file.path;
+    const receiptData = await ocrProcessor.processImage(imagePath);
 
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => {
-  console.log('Connected to MongoDB at:', MONGODB_URI);
-  console.log('Testing database connection...');
-  return mongoose.connection.db.admin().ping();
-})
-.then(() => {
-  console.log('MongoDB connection is healthy');
-  console.log('Available collections:', 
-    mongoose.connection.db.listCollections().toArray()
-    .then(collections => collections.map(c => c.name))
-    .then(names => console.log('Collections:', names))
-  );
-})
-.catch(err => {
-  console.error('MongoDB connection error:', err);
-  process.exit(1);
+    const fileUrl = `/uploads/${path.basename(imagePath)}`;
+    res.json({
+      success: true,
+      data: receiptData,
+      file: {
+        url: fileUrl,
+        path: imagePath,
+        filename: path.basename(imagePath)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Upload failed' });
+  }
 });
 
-// Basic error handling
-mongoose.connection.on('error', err => {
-  console.error('MongoDB connection error:', err);
+app.get('/images', (req, res) => {
+  try {
+    const files = fs.readdirSync(UPLOAD_PATH)
+      .filter(file => file.endsWith('.jpg') || file.endsWith('.png'))
+      .map(filename => ({
+        filename,
+        url: `/uploads/${filename}`,
+        timestamp: fs.statSync(path.join(UPLOAD_PATH, filename)).mtime
+      }));
+    res.json(files);
+  } catch (error) {
+    res.status(500).json({ error: 'Error listing images' });
+  }
 });
 
-mongoose.connection.on('disconnected', () => {
-  console.log('MongoDB disconnected');
+app.post('/api/process-bill', upload.single('image'), async (req, res) => {
+  try {
+    // Validate request
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'No image file provided',
+        details: 'Please select an image to process'
+      });
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/heic'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      // Clean up invalid file
+      await fs.promises.unlink(req.file.path).catch(console.error);
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid file type',
+        details: 'Please upload a valid image file (JPEG, PNG, or HEIC)'
+      });
+    }
+
+    console.log('Processing bill from image:', req.file.path);
+    const receiptData = await ocrProcessor.processImage(req.file.path);
+
+    // Clean up the uploaded file
+    await fs.promises.unlink(req.file.path).catch(err => {
+      console.error('Cleanup error:', err);
+    });
+
+    if (!receiptData.success) {
+      console.error('OCR processing failed:', receiptData.error);
+      return res.status(422).json({ 
+        success: false,
+        error: 'OCR processing failed',
+        details: receiptData.error,
+        debug: {
+          originalText: receiptData.originalText
+        }
+      });
+    }
+
+    if (!receiptData.items || receiptData.items.length === 0) {
+      console.error('No items found in receipt. Original text:', receiptData.originalText);
+      return res.status(422).json({
+        success: false,
+        error: 'No items found in receipt',
+        details: 'The OCR process could not identify any items with prices in the receipt. ' +
+                'Please make sure the receipt image is clear, well-lit, and contains readable prices.',
+        debug: {
+          originalText: receiptData.originalText,
+          storeName: receiptData.storeName,
+          date: receiptData.date
+        }
+      });
+    }
+
+    // Success response
+    res.json({
+      success: true,
+      data: receiptData
+    });
+  } catch (error) {
+    console.error('Processing failed:', error);
+    
+    // Clean up file on error
+    if (req.file) {
+      await fs.promises.unlink(req.file.path).catch(console.error);
+    }
+
+    res.status(500).json({ 
+      success: false,
+      error: 'Processing failed',
+      details: error.message
+    });
+  }
 });
 
-process.on('SIGINT', async () => {
-  await mongoose.connection.close();
+app.post('/api/generate-excel', async (req, res) => {
+  try {
+    // Validate request body
+    if (!req.body) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid request',
+        details: 'Request body is missing'
+      });
+    }
+
+    if (!req.body.items || !Array.isArray(req.body.items)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid data',
+        details: 'Items must be provided as an array'
+      });
+    }
+
+    if (req.body.items.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid data',
+        details: 'Items array cannot be empty'
+      });
+    }
+
+    // Validate each item
+    const invalidItems = req.body.items.filter(item => 
+      !item.name || 
+      typeof item.name !== 'string' ||
+      !item.price ||
+      typeof item.price !== 'number' ||
+      item.price <= 0
+    );
+
+    if (invalidItems.length > 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid items',
+        details: 'Each item must have a name (string) and price (positive number)',
+        invalidItems
+      });
+    }
+
+    const result = await excelGenerator.generateExcel(req.body);
+    res.json({ 
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    console.error('Error generating Excel:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Excel generation failed',
+      details: error.message
+    });
+  }
+});
+
+// Delete image endpoint
+app.delete('/delete-image/:id', async (req, res) => {
+  try {
+    const imageId = req.params.id;
+    console.log('Received delete request for image:', imageId);
+
+    // Check for valid image ID
+    if (!imageId) {
+      console.error('Invalid image ID received');
+      return res.status(400).json({ error: 'Invalid image ID' });
+    }
+
+    // Try to find the image with different extensions
+    const possibleExtensions = ['.jpg', '.jpeg', '.png'];
+    let imagePath = null;
+    let imageExists = false;
+
+    for (const ext of possibleExtensions) {
+      const testPath = path.join(UPLOAD_PATH, `${imageId}${ext}`);
+      if (fs.existsSync(testPath)) {
+        imagePath = testPath;
+        imageExists = true;
+        break;
+      }
+    }
+
+    if (!imageExists) {
+      console.log('Image not found:', imageId);
+      return res.status(404).json({ error: 'Receipt not found' });
+    }
+
+    console.log('Found image at path:', imagePath);
+
+    // Delete the image file
+    try {
+      await fs.promises.unlink(imagePath);
+      console.log('Successfully deleted image:', imagePath);
+    } catch (unlinkError) {
+      console.error('Error deleting image file:', unlinkError);
+      throw new Error('Failed to delete image file');
+    }
+
+    // Try to delete associated Excel file
+    try {
+      const excelFilename = `receipt_${imageId}.xlsx`;
+      const excelPath = path.join(EXCEL_PATH, excelFilename);
+      
+      if (fs.existsSync(excelPath)) {
+        await fs.promises.unlink(excelPath);
+        console.log('Successfully deleted Excel file:', excelPath);
+      }
+    } catch (excelError) {
+      // Log but don't fail if Excel deletion fails
+      console.warn('Non-critical error deleting Excel file:', excelError);
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Receipt deleted successfully',
+      deletedFiles: {
+        image: path.basename(imagePath)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in delete endpoint:', error);
+    res.status(500).json({ 
+      error: error.message || 'Failed to delete receipt',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Graceful shutdown function
+async function shutdown() {
+  console.log('\nShutting down server...');
+  
+  if (server) {
+    await new Promise((resolve) => {
+      server.close(resolve);
+    });
+  }
+  
+  // Cleanup resources
+  await ocrProcessor.terminate();
+  
+  console.log('Server shutdown complete');
   process.exit(0);
-});
+}
 
-// Basic test route
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Server is running' });
-});
+// Handle shutdown signals
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
-// Start server
-const PORT = process.env.PORT || 3000;
-const HOST = '0.0.0.0'; // Listen on all network interfaces
+// Start server with automatic port selection
+async function startServer(port = DEFAULT_PORT) {
+  try {
+    server = app.listen(port, '0.0.0.0', () => {
+      console.log(`Server running on port ${port}`);
+    });
 
-app.listen(PORT, HOST, () => {
-  console.log(`Server running at http://${HOST}:${PORT}`);
-  console.log(`For local access: http://localhost:${PORT}`);
-  console.log(`For network access: http://10.0.0.169:${PORT}`);
-}); 
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.log(`Port ${port} is in use, trying ${port + 1}...`);
+        server.close();
+        startServer(port + 1);
+      } else {
+        console.error('Server error:', error);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer(); 

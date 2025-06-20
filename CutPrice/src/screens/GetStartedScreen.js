@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, SafeAreaView } from 'react-native';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SIZES, FONTS } from '../constants/theme';
 
 export default function GetStartedScreen({ navigation }) {
   return (
@@ -30,14 +30,28 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    alignItems: 'center',
+    padding: SIZES.padding,
     justifyContent: 'center',
-    paddingHorizontal: SIZES.padding * 2,
+    alignItems: 'center',
   },
   logo: {
-    width: '80%',
-    height: 200,
-    marginBottom: SIZES.padding * 4,
+    width: 150,
+    height: 150,
+    marginBottom: SIZES.padding * 2,
+  },
+  title: {
+    fontSize: SIZES.fontSize.title,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
+    textAlign: 'center',
+    marginBottom: SIZES.base,
+  },
+  subtitle: {
+    fontSize: SIZES.fontSize.subtitle,
+    fontFamily: FONTS.regular,
+    color: COLORS.gray,
+    textAlign: 'center',
+    marginBottom: SIZES.padding * 2,
   },
   button: {
     width: '100%',

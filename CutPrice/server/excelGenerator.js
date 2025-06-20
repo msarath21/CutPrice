@@ -1,109 +1,134 @@
 const ExcelJS = require('exceljs');
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
 
 class ExcelGenerator {
     constructor() {
         this.exportsPath = path.join('E:', 'LocalStorage', 'excel_exports');
+        this.initialize();
     }
 
     async initialize() {
         try {
-            await fs.mkdir(this.exportsPath, { recursive: true });
+            if (!fs.existsSync(this.exportsPath)) {
+                await fs.promises.mkdir(this.exportsPath, { recursive: true });
+            }
         } catch (error) {
-            console.error('Error creating exports directory:', error);
+            console.error('Error initializing Excel generator:', error);
             throw error;
         }
     }
 
-    async generateExcel(receiptData) {
-        await this.initialize();
-        
-        const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Receipt Details');
+    validateData(receiptData) {
+        if (!receiptData || typeof receiptData !== 'object') {
+            throw new Error('Receipt data must be an object');
+        }
 
-        // Setup columns
-        sheet.columns = [
-            { header: 'Date', key: 'date', width: 15 },
-            { header: 'Item Name', key: 'item', width: 30 },
-            { header: 'Original Price', key: 'originalPrice', width: 15 },
-            { header: 'Discounted Price', key: 'price', width: 15 },
-            { header: 'Savings', key: 'savings', width: 15 }
-        ];
+        if (!Array.isArray(receiptData.items)) {
+            throw new Error('Receipt items must be an array');
+        }
 
-        // Style the header
-        sheet.getRow(1).font = { bold: true };
-        sheet.getRow(1).fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFE0E0E0' }
+        if (receiptData.items.length === 0) {
+            throw new Error('Receipt must contain at least one item');
+        }
+
+        // Validate each item
+        receiptData.items.forEach((item, index) => {
+            if (!item.name) {
+                throw new Error(`Item at index ${index} must have a name`);
+            }
+
+            // Clean up item name
+            item.name = item.name.trim();
+            if (item.name.length < 1) {
+                throw new Error(`Item at index ${index} has an empty name`);
+            }
+        });
+
+        return {
+            ...receiptData,
+            date: receiptData.date || new Date().toLocaleDateString(),
+            storeName: receiptData.storeName || 'Unknown Store'
         };
+    }
 
-        // Add items data
-        let totalAmount = 0;
-        let totalSavings = 0;
-        let rowIndex = 2; // Start after header
+    async generateExcel(receiptData) {
+        try {
+            console.log('Validating receipt data...');
+            const validatedData = this.validateData(receiptData);
+            console.log('Receipt data validated successfully');
+            
+            await this.initialize();
+            
+            const workbook = new ExcelJS.Workbook();
+            workbook.creator = 'CutPrice App';
+            workbook.created = new Date();
+            
+            const sheet = workbook.addWorksheet('Receipt Details');
 
-        if (receiptData.items && receiptData.items.length > 0) {
-            receiptData.items.forEach(item => {
-                // Simulate original price (20% higher than actual price for demo)
-                // You can adjust this logic based on your needs
-                const originalPrice = parseFloat((item.price * 1.2).toFixed(2));
-                const savings = parseFloat((originalPrice - item.price).toFixed(2));
-                
-                sheet.addRow({
-                    date: receiptData.date || new Date().toLocaleDateString(),
-                    item: item.name,
-                    originalPrice: originalPrice,
-                    price: item.price,
-                    savings: savings
-                });
+            // Setup columns
+            sheet.columns = [
+                { header: 'Date', key: 'date', width: 15 },
+                { header: 'Store', key: 'store', width: 20 },
+                { header: 'Item Name', key: 'item', width: 50 },
+                { header: 'Notes', key: 'notes', width: 30 }
+            ];
 
-                totalAmount += item.price;
-                totalSavings += savings;
-            });
-            rowIndex += receiptData.items.length;
-        }
-
-        // Add empty row
-        sheet.addRow([]);
-        rowIndex++;
-
-        // Add totals with bold formatting
-        const totalRow = sheet.addRow({
-            date: 'TOTAL',
-            item: '',
-            originalPrice: totalAmount + totalSavings,
-            price: totalAmount,
-            savings: totalSavings
-        });
-        totalRow.font = { bold: true };
-        
-        // Add border above total row
-        ['A', 'B', 'C', 'D', 'E'].forEach(col => {
-            sheet.getCell(`${col}${rowIndex - 1}`).border = {
-                top: { style: 'thin' }
+            // Style the header
+            sheet.getRow(1).font = { bold: true };
+            sheet.getRow(1).fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FFE0E0E0' }
             };
-        });
 
-        // Format numbers to show currency
-        for (let i = 2; i <= rowIndex; i++) {
-            ['C', 'D', 'E'].forEach(col => {
-                const cell = sheet.getCell(`${col}${i}`);
-                if (typeof cell.value === 'number') {
-                    cell.numFmt = '$#,##0.00';
-                }
+            // Add items data
+            validatedData.items.forEach((item) => {
+                sheet.addRow({
+                    date: validatedData.date,
+                    store: validatedData.storeName,
+                    item: item.name,
+                    notes: ''  // Empty notes column for manual entry
+                });
             });
-        }
 
-        // Generate filename using timestamp and store name
-        const timestamp = Date.now();
-        const storeName = receiptData.storeName ? receiptData.storeName.replace(/[^a-zA-Z0-9]/g, '_') : 'receipt';
-        const filename = `receipt_${storeName}_${timestamp}.xlsx`;
-        
-        const filePath = path.join(this.exportsPath, filename);
-        await workbook.xlsx.writeFile(filePath);
-        return filePath;
+            // Add empty row
+            sheet.addRow([]);
+
+            // Add summary
+            const totalRow = sheet.addRow({
+                date: 'TOTAL ITEMS',
+                store: '',
+                item: validatedData.items.length.toString(),
+                notes: ''
+            });
+            totalRow.font = { bold: true };
+
+            // Generate filename using timestamp and store name
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const storeName = validatedData.storeName.replace(/[^a-zA-Z0-9]/g, '_');
+            const filename = `receipt_${storeName}_${timestamp}.xlsx`;
+            
+            const filePath = path.join(this.exportsPath, filename);
+            console.log('Saving Excel file to:', filePath);
+
+            await workbook.xlsx.writeFile(filePath);
+            console.log('Excel file generated successfully');
+            
+            return {
+                filePath,
+                filename,
+                url: `/excel/${filename}`,
+                summary: {
+                    totalItems: validatedData.items.length,
+                    storeName: validatedData.storeName,
+                    date: validatedData.date
+                }
+            };
+        } catch (error) {
+            console.error('Error generating Excel:', error);
+            throw error;
+        }
     }
 }
 

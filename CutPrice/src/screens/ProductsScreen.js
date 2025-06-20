@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import { COLORS, SIZES } from '../constants/theme';
+import { COLORS, SIZES, SHADOWS, FONTS } from '../constants/theme';
 import { withBrownStatusBar } from '../utils/screenUtils';
 import { productService } from '../services/api';
 
@@ -56,9 +56,9 @@ function ProductsScreen({ route, navigation }) {
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productUnit}>{item.unit}</Text>
-        <Text style={styles.productPrice}>${item.price.toFixed(2)}</Text>
-        <Text style={styles.productRating}>Rating: {item.rating.toFixed(1)}</Text>
-        {item.isOrganic && (
+        <Text style={styles.productPrice}>${Number(item.price).toFixed(2)}</Text>
+        <Text style={styles.productRating}>Rating: {Number(item.rating || 0).toFixed(1)}</Text>
+        {item.is_organic && (
           <Text style={styles.organicLabel}>Organic</Text>
         )}
       </View>
@@ -96,7 +96,7 @@ function ProductsScreen({ route, navigation }) {
           <FlatList
             data={products}
             renderItem={renderProduct}
-            keyExtractor={(item) => `${item._id}`}
+            keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.productsList}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={() => (
@@ -116,28 +116,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.white,
   },
+  statusBarBackground: {
+    height: Platform.OS === 'android' ? RNStatusBar.currentHeight || 0 : 0,
+    backgroundColor: COLORS.primary,
+  },
+  safeArea: {
+    flex: 1,
+  },
   headerContainer: {
     backgroundColor: COLORS.white,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.lightGray,
-    paddingTop: Platform.OS === 'android' ? STATUSBAR_HEIGHT : 0,
-    zIndex: 2,
-    elevation: Platform.OS === 'android' ? 4 : 0,
-    shadowColor: Platform.OS === 'ios' ? '#000' : undefined,
-    shadowOffset: Platform.OS === 'ios' ? { width: 0, height: 2 } : undefined,
-    shadowOpacity: Platform.OS === 'ios' ? 0.2 : undefined,
-    shadowRadius: Platform.OS === 'ios' ? 2 : undefined,
+    ...SHADOWS.light,
   },
   headerSafeArea: {
     backgroundColor: COLORS.white,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: SIZES.padding,
+    justifyContent: 'space-between',
+    paddingHorizontal: SIZES.padding,
+    paddingTop: SIZES.padding * 1.5,
+    paddingBottom: SIZES.padding,
     backgroundColor: COLORS.white,
-    height: 56,
+  },
+  headerButton: {
+    padding: SIZES.base,
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.radius,
+    ...SHADOWS.light,
+  },
+  headerTitle: {
+    fontSize: SIZES.large,
+    fontFamily: FONTS.medium,
+    color: COLORS.black,
   },
   logo: {
     height: 40,

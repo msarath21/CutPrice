@@ -1,13 +1,9 @@
 import { COLORS } from '../constants/theme';
+import { productService } from '../services/api';
 
 export const searchItems = async (searchQuery) => {
   try {
-    const response = await fetch(`http://10.0.0.169:3000/api/products/search?q=${encodeURIComponent(searchQuery)}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch search results');
-    }
-
-    const results = await response.json();
+    const results = await productService.searchProducts(searchQuery);
 
     if (results.length > 0) {
       // Sort by price

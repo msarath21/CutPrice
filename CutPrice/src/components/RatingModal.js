@@ -87,13 +87,16 @@ const styles = StyleSheet.create({
     modalContainer: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: SIZES.padding,
     },
     modalContent: {
         backgroundColor: COLORS.white,
-        borderTopLeftRadius: SIZES.radius * 2,
-        borderTopRightRadius: SIZES.radius * 2,
-        paddingBottom: 20,
+        borderRadius: SIZES.radius,
+        padding: SIZES.padding,
+        width: '100%',
+        maxWidth: 400,
     },
     header: {
         flexDirection: 'row',
@@ -160,6 +163,20 @@ const styles = StyleSheet.create({
         color: COLORS.white,
         fontSize: SIZES.fontSize.body,
         fontWeight: FONTS.bold,
+    },
+    title: {
+        fontSize: SIZES.fontSize.title,
+        fontFamily: FONTS.medium,
+        color: COLORS.black,
+        textAlign: 'center',
+        marginBottom: SIZES.base,
+    },
+    subtitle: {
+        fontSize: SIZES.fontSize.subtitle,
+        fontFamily: FONTS.regular,
+        color: COLORS.gray,
+        textAlign: 'center',
+        marginBottom: SIZES.padding,
     },
 });
 
