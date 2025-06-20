@@ -12,11 +12,14 @@ import {
   StatusBar as RNStatusBar,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { COLORS, SIZES, SHADOWS, FONTS } from '../constants/theme';
 import { withBrownStatusBar } from '../utils/screenUtils';
 import { productService } from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCart } from '../context/CartContext';
 
 // Import the header image
 const headerLogo = require('../../assets/header.png');
@@ -24,6 +27,26 @@ const headerLogo = require('../../assets/header.png');
 const STATUSBAR_HEIGHT = RNStatusBar.currentHeight || 0;
 
 function PriceComparisonModal({ visible, onClose, productName, prices }) {
+  const { addToCart } = useCart();
+
+  const handleAddToCart = async (store, price) => {
+    try {
+      await addToCart(store, {
+        name: productName,
+        price: price
+      });
+      
+      Alert.alert(
+        'Added to Cart',
+        `${productName} has been added to your ${store} cart.`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      Alert.alert('Error', 'Failed to add item to cart');
+    }
+  };
+
   return (
     <Modal
       visible={visible}
@@ -52,13 +75,21 @@ function PriceComparisonModal({ visible, onClose, productName, prices }) {
                   />
                   <Text style={styles.storeName}>{item.store}</Text>
                 </View>
-                <Text style={[
-                  styles.priceText,
-                  index === 0 && styles.lowestPrice,
-                  index === prices.length - 1 && styles.highestPrice
-                ]}>
-                  ${Number(item.price).toFixed(2)}
-                </Text>
+                <View style={styles.priceActions}>
+                  <Text style={[
+                    styles.priceText,
+                    index === 0 && styles.lowestPrice,
+                    index === prices.length - 1 && styles.highestPrice
+                  ]}>
+                    ${Number(item.price).toFixed(2)}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => handleAddToCart(item.store, item.price)}
+                  >
+                    <Ionicons name="add-circle" size={24} color={COLORS.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))}
           </View>
@@ -381,6 +412,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.gray,
     textAlign: 'center',
+  },
+  priceActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  addButton: {
+    marginLeft: SIZES.base,
+    padding: 4,
   },
 });
 

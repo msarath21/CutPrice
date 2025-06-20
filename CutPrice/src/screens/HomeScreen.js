@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { COLORS, SIZES, SHADOWS } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useCart } from '../context/CartContext';
 
 const { width } = Dimensions.get('window');
 const cardWidth = (width - (SIZES.padding * 3)) / 2;
@@ -32,6 +33,7 @@ const categories = [
 
 export default function HomeScreen({ navigation }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const { totalItems } = useCart();
 
   const filteredCategories = categories.filter(category => {
     const searchLower = searchTerm.toLowerCase();
@@ -59,10 +61,17 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.storeButtonText}>Stores</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.notificationButton}
-            onPress={() => navigation.navigate('Notifications')}
+            style={styles.cartButton}
+            onPress={() => navigation.navigate('Cart')}
           >
-            <Ionicons name="notifications-outline" size={24} color={COLORS.primary} />
+            <Ionicons name="cart-outline" size={24} color={COLORS.primary} />
+            {totalItems > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>
+                  {totalItems > 99 ? '99+' : totalItems}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -151,8 +160,26 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
   },
-  notificationButton: {
+  cartButton: {
     padding: SIZES.base,
+    position: 'relative',
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: COLORS.error,
+    borderRadius: 12,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    color: COLORS.white,
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   promoBanner: {
     paddingHorizontal: SIZES.padding,

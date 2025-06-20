@@ -15,7 +15,7 @@ import BillsScreen from '../screens/BillsScreen';
 import StoresScreen from '../screens/StoresScreen';
 import StoreDetailsScreen from '../screens/StoreDetailsScreen';
 import ProductsScreen from '../screens/ProductsScreen';
-import NotificationsScreen from '../screens/NotificationsScreen';
+import CartScreen from '../screens/CartScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -106,7 +106,7 @@ export default function AppNavigator() {
       <Stack.Screen name="Stores" component={StoresScreen} />
       <Stack.Screen name="StoreDetails" component={StoreDetailsScreen} />
       <Stack.Screen name="Products" component={ProductsScreen} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} />
+      <Stack.Screen name="Cart" component={CartScreen} />
     </Stack.Navigator>
   );
 } 

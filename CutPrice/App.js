@@ -4,14 +4,17 @@ import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import AppNavigator from './src/navigation/AppNavigator';
+import { CartProvider } from './src/context/CartContext';
 
 export default function App() {
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <NavigationContainer>
-        <AppNavigator />
-      </NavigationContainer>
-    </GestureHandlerRootView>
+    <CartProvider>
+      <GestureHandlerRootView style={styles.container}>
+        <NavigationContainer>
+          <AppNavigator />
+        </NavigationContainer>
+      </GestureHandlerRootView>
+    </CartProvider>
   );
 }
 
